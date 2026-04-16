@@ -777,22 +777,41 @@ function Nav({ screen, setScreen, isDesktop, products, logs, onSync }) {
 // =============================================
 const JBIN = 'https://api.jsonbin.io/v3';
 
+function fetchWithTimeout(url, opts, ms=12000) {
+  const ctrl = new AbortController();
+  const tid = setTimeout(() => ctrl.abort(), ms);
+  return fetch(url, { ...opts, mode:'cors', signal: ctrl.signal })
+    .finally(() => clearTimeout(tid));
+}
+
 async function cloudPush(apiKey, binId, payload) {
   const url    = binId ? `${JBIN}/b/${binId}` : `${JBIN}/b`;
   const method = binId ? 'PUT' : 'POST';
   const headers = { 'Content-Type':'application/json', 'X-Master-Key': apiKey };
   if (!binId) { headers['X-Bin-Name'] = 'lume-beauty-diary'; headers['X-Bin-Private'] = 'true'; }
-  const r = await fetch(url, { method, headers, body: JSON.stringify(payload) });
+  const r = await fetchWithTimeout(url, { method, headers, body: JSON.stringify(payload) });
   if (!r.ok) { const e = await r.json().catch(()=>({})); throw new Error(e.message || 'HTTP ' + r.status); }
   const d = await r.json();
   return d.metadata?.id || binId;
 }
 
 async function cloudPull(apiKey, binId) {
-  const r = await fetch(`${JBIN}/b/${binId}/latest`, { headers: { 'X-Master-Key': apiKey } });
+  const r = await fetchWithTimeout(`${JBIN}/b/${binId}/latest`, { headers: { 'X-Master-Key': apiKey } });
   if (!r.ok) { const e = await r.json().catch(()=>({})); throw new Error(e.message || 'HTTP ' + r.status); }
   const d = await r.json();
   return d.record;
+}
+
+// Экспорт / Импорт без внешних сервисов
+function exportCode(products, logs) {
+  const data = { products: (products||[]).map(p=>({...p, photo:undefined})), logs: logs||{} };
+  return btoa(unescape(encodeURIComponent(JSON.stringify(data)))).replace(/=/g,'');
+}
+function importCode(code) {
+  try {
+    const json = decodeURIComponent(escape(atob(code.trim().replace(/\s/g,''))));
+    return JSON.parse(json);
+  } catch { throw new Error('Неверный код'); }
 }
 
 function mergeSync(localProducts, localLogs, remote) {
@@ -867,6 +886,26 @@ function SyncSheet({ products, setProducts, logs, setLogs, onClose }) {
     setLoading(false);
   }
 
+  const [importInput, setImportInput] = useState('');
+  const [exportText,  setExportText]  = useState('');
+  const [codeMsg,     setCodeMsg]     = useState('');
+
+  function doExport() {
+    const code = exportCode(products, logs);
+    setExportText(code);
+    setCodeMsg('');
+  }
+  function doImport() {
+    try {
+      const data = importCode(importInput);
+      const merged = mergeSync(products, logs, data);
+      setProducts(merged.products);
+      setLogs(merged.logs);
+      setCodeMsg('✅ Данные загружены!');
+      setImportInput('');
+    } catch(e) { setCodeMsg('❌ ' + e.message); }
+  }
+
   const tabBtn = (id, label) => (
     <button onClick={()=>setTab(id)} style={{
       flex:1, padding:'8px 0', borderRadius:9, border:'none', cursor:'pointer', fontSize:13, fontWeight:600,
@@ -883,7 +922,8 @@ function SyncSheet({ products, setProducts, logs, setLogs, onClose }) {
 
         {/* Tabs */}
         <div style={{display:'flex',background:'var(--bg)',borderRadius:11,padding:3,marginBottom:16}}>
-          {tabBtn('sync','Синхронизация')}
+          {tabBtn('sync','JSONBin')}
+          {tabBtn('code','📋 Код')}
           {tabBtn('phone','На телефоне')}
         </div>
 
@@ -932,6 +972,46 @@ function SyncSheet({ products, setProducts, logs, setLogs, onClose }) {
             style={{width:'100%',padding:13,borderRadius:12,background:'var(--primary-gd)',color:'#fff',fontWeight:700,fontSize:15,border:'none',cursor:'pointer',opacity:loading?.6:1}}>
             {loading ? '⏳ Синхронизируем…' : '☁️ Синхронизировать'}
           </button>
+        </>}
+
+        {tab==='code' && <>
+          <div style={{background:'var(--bg)',borderRadius:12,padding:14,marginBottom:14,fontSize:13,lineHeight:1.7}}>
+            <div style={{fontWeight:700,marginBottom:6}}>Синхронизация без интернет-сервисов</div>
+            <div style={{color:'var(--text-3)'}}>Генерирует текстовый код со всеми данными. Скопируй на одном устройстве — вставь на другом.</div>
+          </div>
+
+          <div style={{marginBottom:14}}>
+            <div style={{fontSize:11,fontWeight:700,color:'var(--text-3)',letterSpacing:'.6px',marginBottom:8}}>ШАГ 1 — ЭКСПОРТ (на этом устройстве)</div>
+            <button onClick={doExport} style={{width:'100%',padding:11,borderRadius:10,background:'var(--primary-gd)',color:'#fff',fontWeight:700,fontSize:14,border:'none',cursor:'pointer'}}>
+              📤 Создать код для передачи
+            </button>
+            {exportText && <>
+              <textarea readOnly value={exportText} rows={4}
+                style={{width:'100%',marginTop:8,padding:10,borderRadius:9,border:'1px solid var(--border)',fontSize:11,fontFamily:'monospace',background:'var(--bg)',boxSizing:'border-box',resize:'none'}}/>
+              <button onClick={()=>{navigator.clipboard?.writeText(exportText); setCodeMsg('✅ Скопировано!'); setTimeout(()=>setCodeMsg(''),2000);}}
+                style={{width:'100%',marginTop:6,padding:9,borderRadius:9,border:'1px solid var(--border)',background:'var(--surface)',fontSize:13,cursor:'pointer',fontWeight:600}}>
+                📋 Скопировать код
+              </button>
+            </>}
+          </div>
+
+          <div style={{marginBottom:14}}>
+            <div style={{fontSize:11,fontWeight:700,color:'var(--text-3)',letterSpacing:'.6px',marginBottom:8}}>ШАГ 2 — ИМПОРТ (на другом устройстве)</div>
+            <textarea value={importInput} onChange={e=>setImportInput(e.target.value)}
+              placeholder="Вставь сюда код с другого устройства…"
+              rows={4}
+              style={{width:'100%',padding:10,borderRadius:9,border:'1px solid var(--border)',fontSize:11,fontFamily:'monospace',background:'var(--bg)',boxSizing:'border-box',resize:'none'}}/>
+            <button onClick={doImport} disabled={!importInput.trim()}
+              style={{width:'100%',marginTop:6,padding:11,borderRadius:10,background:'var(--primary-gd)',color:'#fff',fontWeight:700,fontSize:14,border:'none',cursor:'pointer',opacity:importInput.trim()?1:.5}}>
+              📥 Загрузить данные
+            </button>
+          </div>
+
+          {codeMsg && <div style={{fontSize:13,padding:'8px 12px',borderRadius:9,textAlign:'center',
+            background: codeMsg.startsWith('✅') ? 'rgba(80,170,100,.1)' : 'rgba(200,60,60,.08)',
+            color: codeMsg.startsWith('✅') ? 'var(--ok)' : 'var(--danger)'}}>
+            {codeMsg}
+          </div>}
         </>}
 
         {tab==='phone' && <>

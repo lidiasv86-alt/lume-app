@@ -777,10 +777,11 @@ function Nav({ screen, setScreen, isDesktop, products, logs, onSync }) {
 // =============================================
 const JBIN = 'https://api.jsonbin.io/v3';
 
-function fetchWithTimeout(url, opts, ms=12000) {
+function fetchWithTimeout(url, opts, ms=25000) {
   const ctrl = new AbortController();
   const tid = setTimeout(() => ctrl.abort(), ms);
-  return fetch(url, { ...opts, mode:'cors', signal: ctrl.signal })
+  return fetch(url, { ...opts, signal: ctrl.signal })
+    .catch(e => { clearTimeout(tid); throw new Error(e.name === 'AbortError' ? 'Нет ответа от сервера (таймаут). Проверь интернет.' : 'Нет соединения с сервером.'); })
     .finally(() => clearTimeout(tid));
 }
 
@@ -804,7 +805,7 @@ async function cloudPull(apiKey, binId) {
 
 // Экспорт / Импорт без внешних сервисов
 function exportCode(products, logs) {
-  const data = { products: (products||[]).map(p=>({...p, photo:undefined})), logs: logs||{} };
+  const data = { products: products||[], logs: logs||{} };
   return btoa(unescape(encodeURIComponent(JSON.stringify(data)))).replace(/=/g,'');
 }
 function importCode(code) {
@@ -834,6 +835,7 @@ function SyncSheet({ products, setProducts, logs, setLogs, onClose }) {
   const [apiKey,    setApiKey]   = useStorage('lume_sync_key',  '');
   const [binId,     setBinId]    = useStorage('lume_sync_bin',  '');
   const [lastSync,  setLastSync] = useStorage('lume_sync_time', '');
+  const [ocrKey,    setOcrKey]   = useStorage('lume_ocr_key',   '');
   const [status,    setStatus]   = useState('');
   const [loading,   setLoading]  = useState(false);
   const [tab,       setTab]      = useState('sync'); // sync | phone
@@ -972,6 +974,20 @@ function SyncSheet({ products, setProducts, logs, setLogs, onClose }) {
             style={{width:'100%',padding:13,borderRadius:12,background:'var(--primary-gd)',color:'#fff',fontWeight:700,fontSize:15,border:'none',cursor:'pointer',opacity:loading?.6:1}}>
             {loading ? '⏳ Синхронизируем…' : '☁️ Синхронизировать'}
           </button>
+
+          {/* OCR ключ */}
+          <div style={{marginTop:20,paddingTop:16,borderTop:'1px solid var(--border)'}}>
+            <div style={{fontSize:11,fontWeight:700,color:'var(--text-3)',letterSpacing:'.6px',marginBottom:6}}>
+              OCR-КЛЮЧ ДЛЯ РАСПОЗНАВАНИЯ ФОТО
+            </div>
+            <input value={ocrKey} onChange={e=>setOcrKey(e.target.value)}
+              placeholder="Бесплатно на ocr.space → API Keys"
+              style={{width:'100%',padding:'10px 14px',borderRadius:10,border:'1px solid var(--border)',fontSize:13,background:'var(--bg)',boxSizing:'border-box'}}/>
+            <div style={{fontSize:11,color:'var(--text-3)',marginTop:5,lineHeight:1.5}}>
+              Без ключа работает 25 раз/день. Свой ключ — 500 раз/день.{' '}
+              <a href="https://ocr.space/ocrapi" target="_blank" style={{color:'var(--primary)'}}>Получить бесплатно →</a>
+            </div>
+          </div>
         </>}
 
         {tab==='code' && <>
@@ -1333,6 +1349,7 @@ function ProductSearchSheet({ onSelect, onClose }) {
   const [pasted,     setPasted]     = useState('');
   const [ocrLoading, setOcrLoading] = useState(false);
   const [ocrMsg,     setOcrMsg]     = useState('');
+  const [ocrKey]                    = useStorage('lume_ocr_key', '');
   const inputRef = useRef();
   const photoRef = useRef();
 
@@ -1346,25 +1363,31 @@ function ProductSearchSheet({ onSelect, onClose }) {
       const compressed = await compressForOCR(file);
       const fd = new FormData();
       fd.append('file', compressed);
-      fd.append('apikey', 'helloworld');
+      fd.append('apikey', ocrKey.trim() || 'helloworld');
       fd.append('language', 'eng');
       fd.append('isOverlayRequired', 'false');
       fd.append('detectOrientation', 'true');
       fd.append('scale', 'true');
       const resp = await fetch('https://api.ocr.space/parse/image', { method:'POST', body:fd });
-      const data = await resp.json();
-      if (data.IsErroredOnProcessing) throw new Error(data.ErrorMessage?.[0] || 'OCR error');
+      const text_raw = await resp.text();
+      let data;
+      try { data = JSON.parse(text_raw); }
+      catch { throw new Error('Лимит запросов исчерпан. Получи свой ключ на ocr.space (бесплатно)'); }
+      if (data.IsErroredOnProcessing) {
+        const msg = Array.isArray(data.ErrorMessage) ? data.ErrorMessage[0] : data.ErrorMessage;
+        throw new Error(msg?.includes('API key') ? 'Лимит исчерпан — получи свой ключ на ocr.space' : (msg || 'OCR error'));
+      }
       const text = data.ParsedResults?.[0]?.ParsedText || '';
       const rawLines = text.split('\n').map(l => l.trim()).filter(l => l.length >= 3 && l.length <= 60);
       const skip = /^[\d\s.,\/\-]+$|ingredients|inci|состав|water|aqua|\bml\b|\boz\b|www\.|kfda|fda|exp\.|lot\b|mfg|spf|\bph\b/i;
       const good = rawLines.filter(l => !skip.test(l));
       const name = good.slice(0, 2).join(' ').replace(/\s{2,}/g, ' ').trim();
       if (name) { setQ(name); setOcrMsg('✅ Распознано — при необходимости отредактируй'); }
-      else { setOcrMsg('Не удалось распознать. Попробуй сфотографировать только название.'); }
-    } catch(err) { setOcrMsg('Ошибка: ' + (err.message || 'попробуй ещё раз')); }
+      else { setOcrMsg('Не удалось распознать. Попробуй сфотографировать только название крупнее.'); }
+    } catch(err) { setOcrMsg('⚠️ ' + (err.message || 'попробуй ещё раз')); }
     setOcrLoading(false);
     if (photoRef.current) photoRef.current.value = '';
-    setTimeout(() => setOcrMsg(''), 6000);
+    setTimeout(() => setOcrMsg(''), 8000);
   }
 
   const enc = q.trim() ? encodeURIComponent(q.trim()) : '';
@@ -1455,8 +1478,26 @@ function ProductSheet({ product, onSave, onDelete, onClose }) {
 
   function handlePhoto(e) {
     const file=e.target.files?.[0]; if(!file) return;
-    if(file.size>2.5*1024*1024){alert('Фото слишком большое. До 2.5 МБ.');return;}
-    const r=new FileReader(); r.onload=ev=>set('photo',ev.target.result); r.readAsDataURL(file);
+    // Сжимаем фото до 500px перед сохранением — экономим localStorage
+    const reader = new FileReader();
+    reader.onload = ev => {
+      const img = new Image();
+      img.onload = () => {
+        const MAX = 500;
+        let w = img.width, h = img.height;
+        if (w > MAX || h > MAX) {
+          if (w > h) { h = Math.round(h * MAX / w); w = MAX; }
+          else       { w = Math.round(w * MAX / h); h = MAX; }
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = w; canvas.height = h;
+        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+        set('photo', canvas.toDataURL('image/jpeg', 0.75));
+      };
+      img.onerror = () => set('photo', ev.target.result);
+      img.src = ev.target.result;
+    };
+    reader.readAsDataURL(file);
   }
 
   // OCR: фото состава → текст
@@ -1467,14 +1508,18 @@ function ProductSheet({ product, onSave, onDelete, onClose }) {
       const compressed = await compressForOCR(file);
       const fd = new FormData();
       fd.append('file', compressed);
-      fd.append('apikey', 'helloworld');
+      const savedOcrKey = localStorage.getItem('lume_ocr_key');
+      const ocrApiKey = (savedOcrKey ? JSON.parse(savedOcrKey) : '') || 'helloworld';
+      fd.append('apikey', ocrApiKey);
       fd.append('language', 'eng');
       fd.append('isOverlayRequired', 'false');
       fd.append('detectOrientation', 'true');
       fd.append('scale', 'true');
       const resp = await fetch('https://api.ocr.space/parse/image', { method:'POST', body:fd });
-      const data = await resp.json();
-      if (data.IsErroredOnProcessing) throw new Error('OCR error');
+      const text_raw = await resp.text();
+      let data;
+      try { data = JSON.parse(text_raw); } catch { throw new Error('Лимит запросов. Получи свой ключ на ocr.space'); }
+      if (data.IsErroredOnProcessing) throw new Error('Лимит исчерпан или ошибка OCR');
       let text = data.ParsedResults?.[0]?.ParsedText || '';
       // Пытаемся найти раздел "Состав" / "Ingredients"
       const low = text.toLowerCase();

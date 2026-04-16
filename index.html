@@ -825,15 +825,35 @@ function SyncSheet({ products, setProducts, logs, setLogs, onClose }) {
     setLoading(true); setStatus('Синхронизируем…');
     try {
       let currentBin = binId.trim();
+
+      // Если bin не задан — ищем существующий по API-ключу
+      if (!currentBin) {
+        setStatus('Ищем данные в облаке…');
+        try {
+          const listR = await fetch(`${JBIN}/b`, { headers: { 'X-Master-Key': key } });
+          if (listR.ok) {
+            const listD = await listR.json();
+            const bins = listD.binsMeta || listD || [];
+            const found = bins.find(b => (b.name || b.snippetMeta?.name) === 'lume-beauty-diary');
+            if (found) {
+              currentBin = found.id || found._id;
+              setBinId(currentBin);
+              setStatus('Найдена корзина, загружаем…');
+            }
+          }
+        } catch(e) { /* листинг недоступен — пойдём дальше */ }
+      }
+
       if (currentBin) {
         // Pull → merge → push
-        const remote  = await cloudPull(key, currentBin);
-        const merged  = mergeSync(products, logs, remote);
+        const remote = await cloudPull(key, currentBin);
+        const merged = mergeSync(products, logs, remote);
         setProducts(merged.products);
         setLogs(merged.logs);
         await cloudPush(key, currentBin, merged);
       } else {
-        // First time: create new bin
+        // Первый запуск — создаём новую корзину
+        setStatus('Создаём облачную корзину…');
         const newBin = await cloudPush(key, null, { products, logs });
         setBinId(newBin);
         currentBin = newBin;
@@ -874,7 +894,7 @@ function SyncSheet({ products, setProducts, logs, setLogs, onClose }) {
             <div>1. Зайди на <b>jsonbin.io</b> → Sign Up (бесплатно)</div>
             <div>2. API Keys → скопируй <b>Master Key</b></div>
             <div>3. Вставь ниже и нажми <b>Синхронизировать</b></div>
-            <div style={{marginTop:6,color:'var(--text-3)',fontSize:12}}>На другом устройстве введи тот же ключ + Код корзины</div>
+            <div style={{marginTop:6,color:'var(--text-3)',fontSize:12}}>На другом устройстве вводи только тот же Master Key — корзина найдётся автоматически</div>
           </div>
 
           <div style={{marginBottom:12}}>
@@ -1186,33 +1206,42 @@ function BarcodeScanner({ onResult, onClose }) {
   );
 }
 
-// Сжимает изображение до <900 КБ для OCR API
+// Сжимает изображение до <900 КБ для OCR API (через FileReader — надёжно на мобильных)
 function compressForOCR(file) {
   return new Promise((resolve) => {
-    const img = new Image();
-    const url = URL.createObjectURL(file);
-    img.onload = () => {
-      URL.revokeObjectURL(url);
-      const MAX = 1400; // макс. сторона в пикселях
-      let w = img.width, h = img.height;
-      if (w > MAX || h > MAX) {
-        if (w > h) { h = Math.round(h * MAX / w); w = MAX; }
-        else       { w = Math.round(w * MAX / h); h = MAX; }
-      }
-      const canvas = document.createElement('canvas');
-      canvas.width = w; canvas.height = h;
-      canvas.getContext('2d').drawImage(img, 0, 0, w, h);
-      // Пробуем quality 0.85, если всё ещё большое — снижаем
-      const tryQuality = (q) => {
-        canvas.toBlob(blob => {
-          if (blob.size > 900 * 1024 && q > 0.4) { tryQuality(q - 0.15); }
-          else resolve(new File([blob], 'photo.jpg', { type: 'image/jpeg' }));
-        }, 'image/jpeg', q);
+    const reader = new FileReader();
+    reader.onerror = () => resolve(file);
+    reader.onload = (ev) => {
+      const img = new Image();
+      img.onerror = () => resolve(file);
+      img.onload = () => {
+        const MAX = 900; // макс. сторона — гарантированно маленький файл
+        let w = img.width, h = img.height;
+        if (w > MAX || h > MAX) {
+          if (w > h) { h = Math.round(h * MAX / w); w = MAX; }
+          else       { w = Math.round(w * MAX / h); h = MAX; }
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = w; canvas.height = h;
+        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+        // Снижаем качество пока файл не влезет в 900 КБ
+        let quality = 0.8;
+        const compress = () => {
+          canvas.toBlob(blob => {
+            if (!blob) { resolve(file); return; }
+            if (blob.size > 900 * 1024 && quality > 0.2) {
+              quality -= 0.15;
+              compress();
+            } else {
+              resolve(new File([blob], 'ocr.jpg', { type: 'image/jpeg' }));
+            }
+          }, 'image/jpeg', quality);
+        };
+        compress();
       };
-      tryQuality(0.85);
+      img.src = ev.target.result;
     };
-    img.onerror = () => resolve(file); // если не удалось — отправляем оригинал
-    img.src = url;
+    reader.readAsDataURL(file);
   });
 }
 

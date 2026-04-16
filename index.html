@@ -372,7 +372,7 @@ img { display:block; }
 <div id="root"></div>
 
 <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+<!-- OCR через api.ocr.space (без локальных библиотек) -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.development.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.development.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
@@ -1204,18 +1204,27 @@ function ProductSearchSheet({ onSelect, onClose }) {
     if (!file) return;
     setOcrLoading(true); setOcrMsg('Читаем текст с фото…');
     try {
-      const result = await Tesseract.recognize(file, 'eng+kor');
-      const rawLines = result.data.text.split('\n')
-        .map(l => l.trim()).filter(l => l.length >= 3 && l.length <= 60);
-      const skip = /^[\d\s.,]+$|ingredients|inci|состав|water|aqua|\bml\b|\boz\b|www\.|kfda|fda|exp\.|lot/i;
+      const fd = new FormData();
+      fd.append('file', file);
+      fd.append('apikey', 'helloworld');
+      fd.append('language', 'eng');
+      fd.append('isOverlayRequired', 'false');
+      fd.append('detectOrientation', 'true');
+      fd.append('scale', 'true');
+      const resp = await fetch('https://api.ocr.space/parse/image', { method:'POST', body:fd });
+      const data = await resp.json();
+      if (data.IsErroredOnProcessing) throw new Error(data.ErrorMessage?.[0] || 'OCR error');
+      const text = data.ParsedResults?.[0]?.ParsedText || '';
+      const rawLines = text.split('\n').map(l => l.trim()).filter(l => l.length >= 3 && l.length <= 60);
+      const skip = /^[\d\s.,\/\-]+$|ingredients|inci|состав|water|aqua|\bml\b|\boz\b|www\.|kfda|fda|exp\.|lot\b|mfg|spf|\bph\b/i;
       const good = rawLines.filter(l => !skip.test(l));
       const name = good.slice(0, 2).join(' ').replace(/\s{2,}/g, ' ').trim();
       if (name) { setQ(name); setOcrMsg('✅ Распознано — при необходимости отредактируй'); }
-      else { setOcrMsg('Не удалось распознать. Попробуй чёткое фото названия.'); }
-    } catch { setOcrMsg('Ошибка. Попробуй ещё раз.'); }
+      else { setOcrMsg('Не удалось распознать. Попробуй сфотографировать только название.'); }
+    } catch(err) { setOcrMsg('Ошибка: ' + (err.message || 'попробуй ещё раз')); }
     setOcrLoading(false);
     if (photoRef.current) photoRef.current.value = '';
-    setTimeout(() => setOcrMsg(''), 5000);
+    setTimeout(() => setOcrMsg(''), 6000);
   }
 
   const enc = q.trim() ? encodeURIComponent(q.trim()) : '';
@@ -1315,8 +1324,17 @@ function ProductSheet({ product, onSave, onDelete, onClose }) {
     const file = e.target.files?.[0]; if(!file) return;
     setOcrLoading(true);
     try {
-      const result = await Tesseract.recognize(file, 'eng+rus');
-      let text = result.data.text;
+      const fd = new FormData();
+      fd.append('file', file);
+      fd.append('apikey', 'helloworld');
+      fd.append('language', 'eng');
+      fd.append('isOverlayRequired', 'false');
+      fd.append('detectOrientation', 'true');
+      fd.append('scale', 'true');
+      const resp = await fetch('https://api.ocr.space/parse/image', { method:'POST', body:fd });
+      const data = await resp.json();
+      if (data.IsErroredOnProcessing) throw new Error('OCR error');
+      let text = data.ParsedResults?.[0]?.ParsedText || '';
       // Пытаемся найти раздел "Состав" / "Ingredients"
       const low = text.toLowerCase();
       const markers = ['ingredients:', 'inci:', 'состав:', 'ingrédients:', 'ingredienti:'];
@@ -1325,8 +1343,9 @@ function ProductSheet({ product, onSave, onDelete, onClose }) {
         if (idx >= 0) { text = text.slice(idx + m.length).trim(); break; }
       }
       // Убираем лишние переносы
-      text = text.replace(/\n+/g, ', ').replace(/,\s*,/g, ',').replace(/\s{2,}/g,' ').trim();
-      set('ingredients', text);
+      text = text.replace(/\r?\n+/g, ', ').replace(/,\s*,/g, ',').replace(/\s{2,}/g,' ').trim();
+      if (text) set('ingredients', text);
+      else alert('Не удалось распознать состав. Попробуй сфотографировать список ингредиентов крупнее.');
     } catch { alert('Не удалось распознать. Попробуй более чёткое фото.'); }
     setOcrLoading(false);
     if(ocrRef.current) ocrRef.current.value='';

@@ -1302,7 +1302,7 @@ function BarcodeScanner({ onResult, onClose }) {
   );
 }
 
-// Подготавливает изображение для Tesseract: grayscale + контраст + resize
+// Подготавливает изображение для Tesseract: resize + мягкий grayscale
 function prepareForOCR(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -1311,8 +1311,8 @@ function prepareForOCR(file) {
       const img = new Image();
       img.onerror = () => reject(new Error('Не удалось загрузить изображение'));
       img.onload = () => {
-        // Масштабируем до 1200px — оптимально для Tesseract
-        const MAX = 1200;
+        // 1600px — Tesseract лучше работает с крупными изображениями
+        const MAX = 1600;
         let w = img.width, h = img.height;
         if (w > MAX || h > MAX) {
           if (w > h) { h = Math.round(h * MAX / w); w = MAX; }
@@ -1322,17 +1322,14 @@ function prepareForOCR(file) {
         canvas.width = w; canvas.height = h;
         const ctx = canvas.getContext('2d');
         ctx.drawImage(img, 0, 0, w, h);
-        // Grayscale + усиление контраста — ключ к хорошему OCR
+        // Лёгкий grayscale без изменения контраста — лучше для разных упаковок
         const id = ctx.getImageData(0, 0, w, h);
         const d = id.data;
         for (let i = 0; i < d.length; i += 4) {
-          let g = 0.299 * d[i] + 0.587 * d[i+1] + 0.114 * d[i+2];
-          // Контраст ×1.8 + небольшое осветление
-          g = Math.min(255, Math.max(0, (g - 128) * 1.8 + 145));
+          const g = 0.299 * d[i] + 0.587 * d[i+1] + 0.114 * d[i+2];
           d[i] = d[i+1] = d[i+2] = g;
         }
         ctx.putImageData(id, 0, 0);
-        // Возвращаем blob для Tesseract
         canvas.toBlob(blob => resolve(blob || file), 'image/png');
       };
       img.src = ev.target.result;
@@ -1362,10 +1359,14 @@ function ProductSearchSheet({ onSelect, onClose }) {
     try {
       const processed = await prepareForOCR(file);
       setOcrMsg('Читаем текст…');
-      const result = await Tesseract.recognize(processed, 'eng+kor', { logger: () => {} });
-      const rawLines = result.data.text.split('\n').map(l => l.trim()).filter(l => l.length >= 3 && l.length <= 60);
-      const skip = /^[\d\s.,\/\-\(\)]+$|ingredients|inci|состав|water|aqua|\bml\b|\boz\b|www\.|kfda|fda|exp\.|lot\b|mfg|spf|\bph\b|©|®|™/i;
-      const good = rawLines.filter(l => !skip.test(l));
+      // PSM 11 = sparse text, лучший режим для этикеток с разным расположением текста
+      const worker = await Tesseract.createWorker('eng+kor', 1, { logger: () => {} });
+      await worker.setParameters({ tessedit_pageseg_mode: '11' });
+      const result = await worker.recognize(processed);
+      await worker.terminate();
+      const rawLines = result.data.text.split('\n').map(l => l.trim()).filter(l => l.length >= 2 && l.length <= 60);
+      const skip = /^[\d\s.,\/\-\(\)\[\]]+$|^[^a-zA-Z\uAC00-\uD7A3]{0,2}$|ingredients|inci|состав|water|aqua|\bml\b|\boz\b|www\.|kfda|fda|exp\.|lot\b|mfg|spf|\bph\b|©|®|™/i;
+      const good = rawLines.filter(l => !skip.test(l) && /[a-zA-Z\uAC00-\uD7A3]/.test(l));
       const name = good.slice(0, 2).join(' ').replace(/\s{2,}/g, ' ').trim();
       if (name) { setQ(name); setOcrMsg('✅ Распознано — при необходимости отредактируй'); }
       else { setOcrMsg('Не удалось распознать. Сфотографируй название крупнее на светлом фоне.'); }
@@ -1491,7 +1492,10 @@ function ProductSheet({ product, onSave, onDelete, onClose }) {
     setOcrLoading(true);
     try {
       const processed = await prepareForOCR(file);
-      const result = await Tesseract.recognize(processed, 'eng+kor', { logger: () => {} });
+      const worker2 = await Tesseract.createWorker('eng+kor', 1, { logger: () => {} });
+      await worker2.setParameters({ tessedit_pageseg_mode: '6' });
+      const result = await worker2.recognize(processed);
+      await worker2.terminate();
       let text = result.data.text;
       // Пытаемся найти раздел "Состав" / "Ingredients"
       const low = text.toLowerCase();

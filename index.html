@@ -372,7 +372,7 @@ img { display:block; }
 <div id="root"></div>
 
 <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
-<!-- OCR через api.ocr.space (без локальных библиотек) -->
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.development.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.development.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
@@ -1302,8 +1302,8 @@ function BarcodeScanner({ onResult, onClose }) {
   );
 }
 
-// Сжимает фото и возвращает base64 dataURL — надёжно на iOS Safari
-function compressForOCR(file) {
+// Подготавливает изображение для Tesseract: grayscale + контраст + resize
+function prepareForOCR(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onerror = () => reject(new Error('Не удалось прочитать файл'));
@@ -1311,7 +1311,8 @@ function compressForOCR(file) {
       const img = new Image();
       img.onerror = () => reject(new Error('Не удалось загрузить изображение'));
       img.onload = () => {
-        const MAX = 800;
+        // Масштабируем до 1200px — оптимально для Tesseract
+        const MAX = 1200;
         let w = img.width, h = img.height;
         if (w > MAX || h > MAX) {
           if (w > h) { h = Math.round(h * MAX / w); w = MAX; }
@@ -1319,15 +1320,20 @@ function compressForOCR(file) {
         }
         const canvas = document.createElement('canvas');
         canvas.width = w; canvas.height = h;
-        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
-        // Подбираем качество пока base64 не влезет в ~900 КБ (~1200 КБ base64)
-        let q = 0.8;
-        const tryQ = () => {
-          const dataUrl = canvas.toDataURL('image/jpeg', q);
-          if (dataUrl.length > 1200 * 1024 && q > 0.2) { q -= 0.15; tryQ(); }
-          else resolve(dataUrl);
-        };
-        tryQ();
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, w, h);
+        // Grayscale + усиление контраста — ключ к хорошему OCR
+        const id = ctx.getImageData(0, 0, w, h);
+        const d = id.data;
+        for (let i = 0; i < d.length; i += 4) {
+          let g = 0.299 * d[i] + 0.587 * d[i+1] + 0.114 * d[i+2];
+          // Контраст ×1.8 + небольшое осветление
+          g = Math.min(255, Math.max(0, (g - 128) * 1.8 + 145));
+          d[i] = d[i+1] = d[i+2] = g;
+        }
+        ctx.putImageData(id, 0, 0);
+        // Возвращаем blob для Tesseract
+        canvas.toBlob(blob => resolve(blob || file), 'image/png');
       };
       img.src = ev.target.result;
     };
@@ -1352,32 +1358,17 @@ function ProductSearchSheet({ onSelect, onClose }) {
   async function handleProductPhoto(e) {
     const file = e.target.files?.[0];
     if (!file) return;
-    setOcrLoading(true); setOcrMsg('Читаем текст с фото…');
+    setOcrLoading(true); setOcrMsg('Обрабатываем фото…');
     try {
-      const b64 = await compressForOCR(file);
-      const fd = new FormData();
-      fd.append('base64Image', b64);
-      fd.append('apikey', ocrKey.trim() || 'helloworld');
-      fd.append('language', 'eng');
-      fd.append('isOverlayRequired', 'false');
-      fd.append('detectOrientation', 'true');
-      fd.append('scale', 'true');
-      const resp = await fetch('https://api.ocr.space/parse/image', { method:'POST', body:fd });
-      const text_raw = await resp.text();
-      let data;
-      try { data = JSON.parse(text_raw); }
-      catch { throw new Error('Лимит запросов исчерпан. Получи свой ключ на ocr.space (бесплатно)'); }
-      if (data.IsErroredOnProcessing) {
-        const msg = Array.isArray(data.ErrorMessage) ? data.ErrorMessage[0] : data.ErrorMessage;
-        throw new Error(msg?.includes('API key') ? 'Лимит исчерпан — получи свой ключ на ocr.space' : (msg || 'OCR error'));
-      }
-      const text = data.ParsedResults?.[0]?.ParsedText || '';
-      const rawLines = text.split('\n').map(l => l.trim()).filter(l => l.length >= 3 && l.length <= 60);
-      const skip = /^[\d\s.,\/\-]+$|ingredients|inci|состав|water|aqua|\bml\b|\boz\b|www\.|kfda|fda|exp\.|lot\b|mfg|spf|\bph\b/i;
+      const processed = await prepareForOCR(file);
+      setOcrMsg('Читаем текст…');
+      const result = await Tesseract.recognize(processed, 'eng+kor', { logger: () => {} });
+      const rawLines = result.data.text.split('\n').map(l => l.trim()).filter(l => l.length >= 3 && l.length <= 60);
+      const skip = /^[\d\s.,\/\-\(\)]+$|ingredients|inci|состав|water|aqua|\bml\b|\boz\b|www\.|kfda|fda|exp\.|lot\b|mfg|spf|\bph\b|©|®|™/i;
       const good = rawLines.filter(l => !skip.test(l));
       const name = good.slice(0, 2).join(' ').replace(/\s{2,}/g, ' ').trim();
       if (name) { setQ(name); setOcrMsg('✅ Распознано — при необходимости отредактируй'); }
-      else { setOcrMsg('Не удалось распознать. Попробуй сфотографировать только название крупнее.'); }
+      else { setOcrMsg('Не удалось распознать. Сфотографируй название крупнее на светлом фоне.'); }
     } catch(err) { setOcrMsg('⚠️ ' + (err.message || 'попробуй ещё раз')); }
     setOcrLoading(false);
     if (photoRef.current) photoRef.current.value = '';
@@ -1499,22 +1490,9 @@ function ProductSheet({ product, onSave, onDelete, onClose }) {
     const file = e.target.files?.[0]; if(!file) return;
     setOcrLoading(true);
     try {
-      const b64 = await compressForOCR(file);
-      const fd = new FormData();
-      fd.append('base64Image', b64);
-      const savedOcrKey = localStorage.getItem('lume_ocr_key');
-      const ocrApiKey = (savedOcrKey ? JSON.parse(savedOcrKey) : '') || 'helloworld';
-      fd.append('apikey', ocrApiKey);
-      fd.append('language', 'eng');
-      fd.append('isOverlayRequired', 'false');
-      fd.append('detectOrientation', 'true');
-      fd.append('scale', 'true');
-      const resp = await fetch('https://api.ocr.space/parse/image', { method:'POST', body:fd });
-      const text_raw = await resp.text();
-      let data;
-      try { data = JSON.parse(text_raw); } catch { throw new Error('Лимит запросов. Получи свой ключ на ocr.space'); }
-      if (data.IsErroredOnProcessing) throw new Error('Лимит исчерпан или ошибка OCR');
-      let text = data.ParsedResults?.[0]?.ParsedText || '';
+      const processed = await prepareForOCR(file);
+      const result = await Tesseract.recognize(processed, 'eng+kor', { logger: () => {} });
+      let text = result.data.text;
       // Пытаемся найти раздел "Состав" / "Ingredients"
       const low = text.toLowerCase();
       const markers = ['ingredients:', 'inci:', 'состав:', 'ingrédients:', 'ingredienti:'];

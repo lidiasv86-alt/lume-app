@@ -380,6 +380,24 @@ img { display:block; }
 const { useState, useEffect, useRef, useCallback } = React;
 
 // =============================================
+// =============================================
+// TESTER PROTECTION — заполняется генератором
+// =============================================
+const TESTER_NAME   = '';           // имя тестировщика, '' = продакшн
+const EXPIRY_DATE   = '';           // 'YYYY-MM-DD', '' = без ограничений
+const TESTER_ID     = '';           // уникальный ID копии
+
+function checkExpiry() {
+  if (!EXPIRY_DATE) return null;
+  const exp = new Date(EXPIRY_DATE);
+  const now = new Date();
+  const diff = Math.ceil((exp - now) / (1000 * 60 * 60 * 24));
+  if (diff < 0) return 'expired';
+  if (diff <= 3) return 'soon';
+  return null;
+}
+
+// =============================================
 // CONSTANTS
 // =============================================
 const CATEGORIES = {
@@ -654,6 +672,9 @@ function exportDiaryCSV(logs, products) {
 // =============================================
 // STORAGE HOOK
 // =============================================
+// Проверка: работает ли localStorage
+const STORAGE_OK = (()=>{ try{ localStorage.setItem('_t','1'); localStorage.removeItem('_t'); return true; }catch{ return false; }})();
+
 function useStorage(key, init) {
   const [val,setVal]=useState(()=>{
     try { const s=localStorage.getItem(key); return s?JSON.parse(s):init; } catch{return init;}
@@ -666,6 +687,15 @@ function useStorage(key, init) {
     });
   },[key]);
   return [val,set];
+}
+
+function StorageWarning() {
+  if (STORAGE_OK) return null;
+  return (
+    <div style={{position:'fixed',top:0,left:0,right:0,zIndex:99999,background:'#c0392b',color:'white',padding:'12px 16px',fontSize:13,lineHeight:1.5,textAlign:'center'}}>
+      ⚠️ <strong>Данные не сохраняются!</strong> Открой приложение через HTTPS-ссылку (GitHub Pages или Netlify), а не как локальный файл.
+    </div>
+  );
 }
 
 // =============================================
@@ -1031,22 +1061,30 @@ function SyncSheet({ products, setProducts, logs, setLogs, onClose }) {
         </>}
 
         {tab==='phone' && <>
-          <div style={{background:'var(--bg)',borderRadius:12,padding:14,marginBottom:14,fontSize:13,lineHeight:1.8}}>
-            <div style={{fontWeight:700,marginBottom:6}}>Чтобы открыть на телефоне:</div>
-            <div style={{marginBottom:10}}>Приложению нужен HTTPS-адрес для работы камеры и микрофона на iOS/Android.</div>
-            <div style={{fontWeight:600,color:'var(--primary)',marginBottom:4}}>Способ 1 — Netlify (30 секунд):</div>
-            <div>1. Открой <b>app.netlify.com/drop</b> на компьютере</div>
-            <div>2. Перетащи файл <b>lume.html</b> в зону загрузки</div>
-            <div>3. Получишь ссылку вида <b>random-name.netlify.app</b></div>
-            <div>4. Открой её на телефоне → добавь в «На экран Домой»</div>
+          {/* Ссылка на приложение */}
+          <div style={{background:'var(--primary-lt)',borderRadius:12,padding:14,marginBottom:14}}>
+            <div style={{fontSize:11,fontWeight:700,color:'var(--primary)',letterSpacing:'.6px',marginBottom:8}}>АДРЕС ПРИЛОЖЕНИЯ</div>
+            <div style={{display:'flex',gap:8,alignItems:'center'}}>
+              <div style={{flex:1,fontSize:13,fontWeight:600,color:'var(--text-1)',wordBreak:'break-all',lineHeight:1.4}}>
+                https://lidiasv86-alt.github.io/lume-app/
+              </div>
+              <button onClick={()=>navigator.clipboard?.writeText('https://lidiasv86-alt.github.io/lume-app/')}
+                style={{padding:'8px 12px',borderRadius:9,border:'none',background:'var(--primary)',color:'#fff',fontSize:12,fontWeight:600,cursor:'pointer',flexShrink:0}}>
+                Копировать
+              </button>
+            </div>
+            <div style={{fontSize:11,color:'var(--text-3)',marginTop:8}}>
+              💡 Добавь в закладки Safari: <b>⌘D</b> на компьютере<br/>
+              📱 На телефоне: Поделиться → «На экран Домой»
+            </div>
           </div>
           <div style={{background:'var(--bg)',borderRadius:12,padding:14,fontSize:13,lineHeight:1.8}}>
-            <div style={{fontWeight:600,color:'var(--primary)',marginBottom:4}}>Способ 2 — GitHub Pages (постоянная ссылка):</div>
-            <div>1. Создай репозиторий на <b>github.com</b></div>
-            <div>2. Загрузи <b>lume.html</b> как <b>index.html</b></div>
-            <div>3. Settings → Pages → Branch: main → Save</div>
-            <div>4. Ссылка: <b>username.github.io/repo</b></div>
-            <div style={{marginTop:8,color:'var(--text-3)',fontSize:12}}>После обновления файла — просто залей новую версию. Данные хранятся в облаке через JSONBin.</div>
+            <div style={{fontWeight:700,marginBottom:6}}>Как обновить приложение:</div>
+            <div>1. Открой <b>github.com</b> → репозиторий <b>lume-app</b></div>
+            <div>2. Нажми на <b>index.html</b> → карандаш ✏️</div>
+            <div>3. Выдели всё (<b>⌘A</b>) → вставь новый код</div>
+            <div>4. <b>Commit changes</b> → страница обновится через 30 сек</div>
+            <div style={{marginTop:8,color:'var(--text-3)',fontSize:12}}>⚠️ Данные хранятся в браузере — не открывай как локальный файл</div>
           </div>
         </>}
 
@@ -1875,6 +1913,11 @@ function TrackerScreen({ products, logs, setLogs, isDesktop }) {
     upd(['gadgets'],cur.includes(id)?cur.filter(x=>x!==id):[...cur,id]);
   }
 
+  function toggleExtra(id){
+    const cur=log.extra||[];
+    upd(['extra'],cur.includes(id)?cur.filter(x=>x!==id):[...cur,id]);
+  }
+
   const allUsed=[...(log.morning||[]),...(log.evening||[])];
   const conflicts=checkConflicts(cosmetics.filter(p=>allUsed.includes(p.id)));
   const dateDisplay=isToday?'Сегодня':new Date(date+'T12:00:00').toLocaleDateString('ru-RU',{day:'numeric',month:'short',weekday:'short'});
@@ -1912,6 +1955,61 @@ function TrackerScreen({ products, logs, setLogs, isDesktop }) {
           })
         }
         <textarea className="field-input" placeholder={`Заметки к ${period==='morning'?'утренней':'вечерней'} рутине...`} value={log[`${period}Notes`]||''} onChange={e=>upd([`${period}Notes`],e.target.value)} rows={2} style={{marginTop:12,background:'var(--bg)',borderRadius:8,padding:10,fontSize:14}}/>
+      </div>
+    );
+  };
+
+  const ExtraSection = ()=>{
+    const [open, setOpen] = useState(!!(log.extra?.length || log.extraNotes));
+    const done = (log.extra||[]).length;
+    // Считаем сколько раз делали доп. уход за последние 7 дней
+    const weekCount = Array.from({length:7},(_,i)=>{
+      const d=new Date(); d.setDate(d.getDate()-i);
+      return d.toISOString().slice(0,10);
+    }).filter(k=>logs[k]?.extra?.length>0).length;
+
+    return (
+      <div className="routine-card" style={{marginTop:12}}>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',cursor:'pointer'}} onClick={()=>setOpen(o=>!o)}>
+          <div>
+            <div style={{fontSize:16,fontWeight:700}}>✨ Дополнительный уход</div>
+            <div style={{fontSize:12,color:'var(--text-3)',marginTop:2}}>
+              {done>0 ? `${done} средств сегодня` : 'маски, пилинги, гаджеты, спец. уход'}
+              {weekCount>0 && <span style={{marginLeft:8,background:'var(--primary-lt)',color:'var(--primary)',borderRadius:10,padding:'1px 7px',fontSize:11,fontWeight:600}}>{weekCount}×/неделю</span>}
+            </div>
+          </div>
+          <div style={{display:'flex',alignItems:'center',gap:8}}>
+            {done>0&&<div style={{fontSize:12,fontWeight:700,color:'var(--ok)',background:'var(--ok-lt)',padding:'4px 10px',borderRadius:20}}>✓ {done}</div>}
+            <span style={{fontSize:18,color:'var(--text-3)',transform:open?'rotate(180deg)':'none',transition:'transform .2s'}}>⌄</span>
+          </div>
+        </div>
+
+        {open && <>
+          <div style={{marginTop:12}}>
+            {current.length===0
+              ? <div style={{textAlign:'center',fontSize:13,color:'var(--text-3)',padding:'12px 0'}}>Добавь средства в базу («Есть сейчас»)</div>
+              : current.map(p=>{
+                const checked=(log.extra||[]).includes(p.id);
+                return (
+                  <div key={p.id} className="check-item" onClick={()=>toggleExtra(p.id)}>
+                    <div className={`check-box${checked?' on':''}`}>{checked&&<IcoCheck/>}</div>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{fontSize:14,textDecoration:checked?'line-through':'none',color:checked?'var(--text-3)':'var(--text)'}}>{p.name}</div>
+                      {p.brand&&<div style={{fontSize:11,color:'var(--text-3)'}}>{p.brand}</div>}
+                    </div>
+                    <span style={{fontSize:22,flexShrink:0}}>{typeIcon(p.type)}</span>
+                  </div>
+                );
+              })
+            }
+          </div>
+          <textarea className="field-input"
+            placeholder="Что использовала, как кожа реагировала..."
+            value={log.extraNotes||''}
+            onChange={e=>upd(['extraNotes'],e.target.value)}
+            rows={2}
+            style={{marginTop:10,background:'var(--bg)',borderRadius:8,padding:10,fontSize:14}}/>
+        </>}
       </div>
     );
   };
@@ -1973,6 +2071,7 @@ function TrackerScreen({ products, logs, setLogs, isDesktop }) {
           <RoutineSection period="evening" label="🌙 Вечерняя рутина"/>
         </div>
         <GadgetsSection/>
+        <ExtraSection/>
       </div>
 
       {/* Skin condition */}
@@ -2019,8 +2118,9 @@ function AnalyticsScreen({ products, logs, isDesktop }) {
   const avg=rated.length?(rated.reduce((s,d)=>s+d.rating,0)/rated.length).toFixed(1):'—';
 
   const usage={};
-  Object.values(logs).forEach(l=>[...(l.morning||[]),...(l.evening||[])].forEach(id=>{usage[id]=(usage[id]||0)+1;}));
+  Object.values(logs).forEach(l=>[...(l.morning||[]),...(l.evening||[]),...(l.extra||[])].forEach(id=>{usage[id]=(usage[id]||0)+1;}));
   const top5=Object.entries(usage).sort(([,a],[,b])=>b-a).slice(0,5).map(([id,cnt])=>({p:products.find(p=>p.id===id),cnt})).filter(x=>x.p);
+  const extraDays14=days14.filter(d=>logs[d.key]?.extra?.length>0).length;
 
   const reactCnt={};
   Object.values(logs).forEach(l=>(l.reactions||[]).forEach(r=>{reactCnt[r]=(reactCnt[r]||0)+1;}));
@@ -2052,6 +2152,23 @@ function AnalyticsScreen({ products, logs, isDesktop }) {
           </div>
         </div>
       </div>
+
+      {/* Доп. уход — статистика */}
+      {extraDays14>0&&(
+        <div className="section">
+          <div className="card" style={{display:'flex',alignItems:'center',gap:14,padding:'14px 16px'}}>
+            <span style={{fontSize:32}}>✨</span>
+            <div style={{flex:1}}>
+              <div style={{fontSize:14,fontWeight:700}}>Дополнительный уход</div>
+              <div style={{fontSize:12,color:'var(--text-3)',marginTop:2}}>за последние 14 дней</div>
+            </div>
+            <div style={{textAlign:'right'}}>
+              <div style={{fontSize:26,fontWeight:800,color:'var(--primary)'}}>{extraDays14}×</div>
+              <div style={{fontSize:11,color:'var(--text-3)'}}>{(extraDays14/2).toFixed(1)}×/нед</div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Desktop: top products + reactions side-by-side */}
       <div className="section">
@@ -2290,9 +2407,24 @@ function App() {
   const [logs,      setLogs]     = useStorage('lume_v1_logs',    {});
   const [showSync,  setShowSync] = useState(false);
   const isDesktop                = useIsDesktop();
+  const expiryStatus             = checkExpiry();
+
+  // Экран истечения срока
+  if (expiryStatus === 'expired') return (
+    <div style={{display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',height:'100vh',padding:32,textAlign:'center',background:'var(--surface)'}}>
+      <div style={{fontSize:56,marginBottom:16}}>🔒</div>
+      <div style={{fontSize:22,fontWeight:700,marginBottom:8,color:'var(--text-1)'}}>Период тестирования завершён</div>
+      <div style={{fontSize:14,color:'var(--text-3)',lineHeight:1.6,maxWidth:280}}>
+        Срок действия этой тестовой версии истёк.<br/>
+        Свяжись с разработчиком для получения новой версии.
+      </div>
+      {TESTER_NAME && <div style={{marginTop:24,fontSize:12,color:'var(--text-3)',padding:'8px 16px',background:'var(--bg)',borderRadius:8}}>Копия: {TESTER_NAME} · {TESTER_ID}</div>}
+    </div>
+  );
 
   return (
     <div id="app">
+      <StorageWarning/>
       <Nav screen={screen} setScreen={setScreen} isDesktop={isDesktop} products={products} logs={logs} onSync={()=>setShowSync(true)}/>
       {screen==='home'      && <HomeScreen      products={products} setProducts={setProducts} logs={logs} setScreen={setScreen} setLogs={setLogs} isDesktop={isDesktop}/>}
       {screen==='products'  && <ProductsScreen  products={products} setProducts={setProducts}/>}
@@ -2300,6 +2432,13 @@ function App() {
       {screen==='advice'    && <AdviceScreen    products={products}/>}
       {screen==='analytics' && <AnalyticsScreen products={products} logs={logs} isDesktop={isDesktop}/>}
       {showSync && <SyncSheet products={products} setProducts={setProducts} logs={logs} setLogs={setLogs} onClose={()=>setShowSync(false)}/>}
+      {/* Водяной знак для тестовых копий */}
+      {TESTER_NAME && (
+        <div style={{position:'fixed',bottom:isDesktop?12:72,right:12,fontSize:10,color:'rgba(0,0,0,.25)',pointerEvents:'none',zIndex:9999,textAlign:'right',lineHeight:1.4}}>
+          🧪 Тест: {TESTER_NAME}<br/>
+          до {EXPIRY_DATE}{expiryStatus==='soon'?' ⚠️':''}
+        </div>
+      )}
     </div>
   );
 }

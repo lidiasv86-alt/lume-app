@@ -486,6 +486,96 @@ const CONFLICTS = [
     severity:'warn', title:'⚠️ Медные пептиды + кислоты / ретинол',
     text:'Кислоты и ретинол дестабилизируют медные пептиды. Разделите по времени суток.',
   },
+  {
+    a:['glycolic','lactic','mandelic','tartaric','aha'],
+    b:['ascorbic acid','l-ascorbic','vitamin c','3-o-ethyl ascorbic','ascorbyl'],
+    severity:'info', title:'ℹ️ AHA + витамин C',
+    text:'Оба работают при низком pH — в одном сеансе могут раздражать. Лучше: витамин C утром, кислоты вечером.',
+  },
+  {
+    a:['glycolic','lactic','mandelic','aha'],
+    b:['salicylic','bha'],
+    severity:'warn', title:'⚠️ AHA + BHA вместе',
+    text:'Двойное отшелушивание в одном сеансе нагружает барьер кожи. Используй по очереди (чередуй дни) или в разное время суток.',
+  },
+];
+
+const SYNERGIES = [
+  {
+    a:['hyaluronic acid','sodium hyaluronate'],
+    b:['ceramide','shea butter','squalane','glycerin','petrolatum','dimethicone'],
+    title:'💧 Гиалуронка + запечатывающий крем',
+    text:'Гиалуронка притягивает влагу, жирный финиш запечатывает её — идеальная пара для долгого увлажнения.',
+  },
+  {
+    a:['ascorbic acid','l-ascorbic','vitamin c','3-o-ethyl ascorbic','ascorbyl'],
+    b:['ferulic acid'],
+    title:'☀️ Витамин C + феруловая кислота',
+    text:'Феруловая кислота стабилизирует витамин C и удваивает антиоксидантный эффект. Классическое трио — особенно с витамином E.',
+  },
+  {
+    a:['ascorbic acid','l-ascorbic','vitamin c'],
+    b:['tocopherol','vitamin e'],
+    title:'☀️ Витамин C + витамин E',
+    text:'Вместе они значительно эффективнее, чем по отдельности — усиливают защиту от свободных радикалов.',
+  },
+  {
+    a:['retinol','retinal','tretinoin','retinaldehyde','retinoic'],
+    b:['niacinamide','nicotinamide'],
+    title:'🌙 Ретинол + ниацинамид',
+    text:'Ниацинамид укрепляет барьер и снижает раздражение от ретинола. Отличная пара для вечера.',
+  },
+  {
+    a:['retinol','retinal','tretinoin','retinaldehyde'],
+    b:['hyaluronic acid','sodium hyaluronate'],
+    title:'🌙 Ретинол + гиалуронка',
+    text:'Гиалуронка компенсирует сухость от ретинола. Наноси слоями: ретинол → гиалуронка → крем.',
+  },
+  {
+    a:['salicylic','bha'],
+    b:['niacinamide','nicotinamide'],
+    title:'🔬 Салициловая + ниацинамид',
+    text:'Салициловая чистит поры изнутри, ниацинамид успокаивает и регулирует себум — мощная пара против акне.',
+  },
+  {
+    a:['glycolic','lactic','mandelic','aha'],
+    b:['hyaluronic acid','sodium hyaluronate'],
+    title:'✨ AHA + гиалуронка',
+    text:'После отшелушивания кожа впитывает активы лучше. Нанеси гиалуронку сразу после кислоты — эффект усилится.',
+  },
+  {
+    a:['niacinamide','nicotinamide'],
+    b:['hyaluronic acid','sodium hyaluronate'],
+    title:'💧 Ниацинамид + гиалуронка',
+    text:'Идеальный дуэт: ниацинамид сужает поры и выравнивает тон, гиалуронка увлажняет. Подходит для любого типа кожи.',
+  },
+  {
+    a:['centella','cica','madecassoside','asiaticoside','centasiatica'],
+    b:['niacinamide','nicotinamide'],
+    title:'🌿 Центелла + ниацинамид',
+    text:'Центелла заживляет и успокаивает воспаления, ниацинамид регулирует себум — идеально для чувствительной и проблемной кожи.',
+  },
+  {
+    a:['azelaic','azelaic acid'],
+    b:['niacinamide','nicotinamide'],
+    title:'✨ Азелаиновая + ниацинамид',
+    text:'Оба выравнивают тон и уменьшают покраснения — суммарный эффект против постакне и розацеа.',
+  },
+  {
+    a:['peptide','palmitoyl','matrixyl','argireline','acetyl hexapeptide'],
+    b:['hyaluronic acid','sodium hyaluronate'],
+    title:'🔬 Пептиды + гиалуронка',
+    text:'Пептиды стимулируют коллаген, гиалуронка обеспечивает среду для их работы — отличный антивозрастной тандем.',
+  },
+];
+
+const COMPATIBILITY_TIPS = [
+  { icon:'☀️', title:'Утро — защита', text:'Витамин C → тонер → сыворотка → увлажнение → SPF. Ретинол и сильные кислоты — не для утра.' },
+  { icon:'🌙', title:'Вечер — восстановление', text:'Ретинол, AHA/BHA, пептиды — вечерние активы. Всегда заканчивай увлажняющим кремом.' },
+  { icon:'📅', title:'Чередуй активы', text:'Не обязательно использовать всё каждый день. Ретинол и кислоты лучше чередовать через день — так меньше раздражения.' },
+  { icon:'💧', title:'Порядок нанесения', text:'Очищение → тонер → сыворотка → увлажнение → масло/крем. Более лёгкие текстуры — раньше, тяжёлые — позже.' },
+  { icon:'🔬', title:'Вводи постепенно', text:'Новый актив — раз в 2 недели. Так легче отследить реакцию кожи и понять, что ей не понравилось.' },
+  { icon:'🛡️', title:'SPF — обязательно', text:'Кислоты и ретинол делают кожу уязвимой к UV. Без SPF утром их эффект снижается, а пигментация усиливается.' },
 ];
 
 // =============================================
@@ -612,6 +702,30 @@ function selfConflicts(ing) {
   if (!ing) return [];
   const t=ing.toLowerCase();
   return CONFLICTS.filter(c=>c.a.some(k=>t.includes(k))&&c.b.some(k=>t.includes(k)));
+}
+
+function checkSynergies(products) {
+  const results=[];
+  const seen=new Set();
+  for (let i=0;i<products.length;i++) {
+    for (let j=i+1;j<products.length;j++) {
+      const ingA=(products[i].ingredients||'').toLowerCase();
+      const ingB=(products[j].ingredients||'').toLowerCase();
+      if (!ingA||!ingB) continue;
+      for (const s of SYNERGIES) {
+        const aInA=s.a.some(k=>ingA.includes(k)), bInB=s.b.some(k=>ingB.includes(k));
+        const aInB=s.a.some(k=>ingB.includes(k)), bInA=s.b.some(k=>ingA.includes(k));
+        if ((aInA&&bInB)||(aInB&&bInA)) {
+          const key=s.title+'|'+products[i].id+'|'+products[j].id;
+          if (!seen.has(key)) {
+            seen.add(key);
+            results.push({...s, pair:[products[i].name, products[j].name]});
+          }
+        }
+      }
+    }
+  }
+  return results;
 }
 
 // Анализ продуктов по проблемам кожи
@@ -1911,8 +2025,14 @@ function TrackerScreen({ products, logs, setLogs, isDesktop }) {
     upd(['extra'],cur.includes(id)?cur.filter(x=>x!==id):[...cur,id]);
   }
 
+  const morningProds=cosmetics.filter(p=>(log.morning||[]).includes(p.id));
+  const eveningProds=cosmetics.filter(p=>(log.evening||[]).includes(p.id));
   const allUsed=[...(log.morning||[]),...(log.evening||[])];
-  const conflicts=checkConflicts(cosmetics.filter(p=>allUsed.includes(p.id)));
+  const usedProds=cosmetics.filter(p=>allUsed.includes(p.id));
+  const morningConflicts=checkConflicts(morningProds).map(c=>({...c,period:'☀️ утро'}));
+  const eveningConflicts=checkConflicts(eveningProds).map(c=>({...c,period:'🌙 вечер'}));
+  const conflicts=[...morningConflicts,...eveningConflicts];
+  const synergies=checkSynergies(usedProds);
   const dateDisplay=isToday?'Сегодня':new Date(date+'T12:00:00').toLocaleDateString('ru-RU',{day:'numeric',month:'short',weekday:'short'});
 
   function handleSkinPhoto(e){
@@ -2038,14 +2158,27 @@ function TrackerScreen({ products, logs, setLogs, isDesktop }) {
         <button className="date-arrow" disabled={isToday} onClick={()=>setDate(prev=>addDays(prev,1))}>›</button>
       </div>
 
-      {conflicts.length>0&&(
+      {(conflicts.length>0||synergies.length>0)&&(
         <div className="section">
           {conflicts.map((c,i)=>(
             <div key={i} className={`conflict-box${c.severity==='danger'?' danger':''}`}>
-              <div className="conflict-title">{c.title} · {c.pair.join(' + ')}</div>
+              <div className="conflict-title">{c.title}{c.period&&<span style={{fontSize:11,fontWeight:400,opacity:.7,marginLeft:6}}>({c.period})</span>}</div>
+              <div style={{fontSize:11,color:'var(--text-3)',marginBottom:3}}>{c.pair.join(' + ')}</div>
               <div className="conflict-detail">{c.text}</div>
             </div>
           ))}
+          {synergies.length>0&&(
+            <div style={{marginTop: conflicts.length>0?10:0}}>
+              <div style={{fontSize:12,fontWeight:700,color:'var(--ok)',letterSpacing:'.4px',marginBottom:6}}>✨ ХОРОШИЕ СОЧЕТАНИЯ</div>
+              {synergies.map((s,i)=>(
+                <div key={i} style={{background:'var(--ok-lt)',border:'1px solid rgba(80,170,100,.2)',borderRadius:12,padding:'10px 14px',marginBottom:8}}>
+                  <div style={{fontWeight:700,fontSize:13,color:'var(--ok)',marginBottom:2}}>{s.title}</div>
+                  <div style={{fontSize:11,color:'var(--text-3)',marginBottom:4}}>{s.pair.join(' + ')}</div>
+                  <div style={{fontSize:12,color:'var(--text-2)'}}>{s.text}</div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
@@ -2261,6 +2394,7 @@ function AnalyticsScreen({ products, logs, isDesktop }) {
 // ADVICE SCREEN
 // =============================================
 function AdviceScreen({ products }) {
+  const [advTab, setAdvTab] = useState('concerns');
   const [selected, setSelected] = useState([]);
   const cosmetics = products.filter(p=>p.category==='current' && !PRODUCT_TYPES.find(t=>t.id===p.type)?.isGadget);
 
@@ -2280,22 +2414,43 @@ function AdviceScreen({ products }) {
       );
       if (found.length>0) matched.push({ product:p, found });
     }
-    // Сортируем: больше совпавших ингредиентов → выше
     matched.sort((a,b)=>b.found.length-a.found.length);
     return { concern, matched };
   });
 
   const noIngredients = cosmetics.filter(p=>!(p.ingredients||'').trim()).length;
 
+  // Совместимость — все конфликты и синергии в текущих продуктах
+  const allConflicts = checkConflicts(cosmetics);
+  const allSynergies = checkSynergies(cosmetics);
+  const withIngredients = cosmetics.filter(p=>(p.ingredients||'').trim());
+
+  const tabBtn = (id, label) => (
+    <button onClick={()=>setAdvTab(id)} style={{
+      flex:1, padding:'9px 4px', borderRadius:10, border:'none', cursor:'pointer',
+      fontWeight:700, fontSize:13, transition:'all .15s',
+      background: advTab===id ? 'var(--primary)' : 'transparent',
+      color: advTab===id ? '#fff' : 'var(--text-3)',
+    }}>{label}</button>
+  );
+
   return (
     <div className="screen">
       <div className="page-header">
         <div className="page-title">Советы 💡</div>
-        <div className="page-sub">Выбери проблему — покажу, что поможет из твоей косметички</div>
+      </div>
+
+      {/* Tabs */}
+      <div className="section" style={{paddingBottom:0}}>
+        <div style={{display:'flex',background:'var(--bg)',borderRadius:12,padding:3,gap:2}}>
+          {tabBtn('concerns','🎯 По проблеме')}
+          {tabBtn('compat','🔗 Совместимость')}
+          {tabBtn('tips','📋 Правила')}
+        </div>
       </div>
 
       {noIngredients>0 && (
-        <div className="section">
+        <div className="section" style={{paddingTop:8}}>
           <div className="alert alert-warn" style={{borderRadius:12}}>
             <span>⚠️</span>
             <div style={{fontSize:13}}>У <strong>{noIngredients}</strong> средств не указан состав. <span style={{color:'var(--text-2)'}}>Добавь INCI в базу для точных советов.</span></div>
@@ -2303,6 +2458,8 @@ function AdviceScreen({ products }) {
         </div>
       )}
 
+      {/* === ВКЛ: По проблеме === */}
+      {advTab==='concerns'&&<>
       {/* Выбор проблем */}
       <div className="section">
         <div className="section-title" style={{marginBottom:12}}>Что беспокоит?</div>
@@ -2370,6 +2527,122 @@ function AdviceScreen({ products }) {
 
       {selected.length===0&&cosmetics.length>0&&(
         <div className="empty" style={{paddingTop:30}}><div className="empty-icon">👆</div><div className="empty-title">Выбери проблему</div><div className="empty-text">Нажми на одну или несколько проблем выше — подберу средства из твоей коллекции</div></div>
+      )}
+      </>}
+
+      {/* === ВКЛ: Совместимость === */}
+      {advTab==='compat'&&<>
+        {withIngredients.length<2?(
+          <div className="empty" style={{paddingTop:40}}>
+            <div className="empty-icon">🔗</div>
+            <div className="empty-title">Нужен состав хотя бы у 2 средств</div>
+            <div className="empty-text">Добавь INCI-состав к средствам в базе (через OCR или вручную) — проверю совместимость</div>
+          </div>
+        ):(
+          <>
+            {allConflicts.length>0&&(
+              <div className="section">
+                <div className="section-title" style={{marginBottom:8,color:'var(--danger)'}}>⚠️ Конфликты в твоей рутине</div>
+                {allConflicts.map((c,i)=>(
+                  <div key={i} className={`conflict-box${c.severity==='danger'?' danger':''}`} style={{marginBottom:10}}>
+                    <div className="conflict-title">{c.title}</div>
+                    <div style={{fontSize:12,color:'var(--text-3)',marginBottom:4,fontWeight:500}}>{c.pair.join(' + ')}</div>
+                    <div className="conflict-detail">{c.text}</div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {allSynergies.length>0&&(
+              <div className="section">
+                <div className="section-title" style={{marginBottom:8,color:'var(--ok)'}}>✨ Отличные сочетания</div>
+                {allSynergies.map((s,i)=>(
+                  <div key={i} style={{background:'var(--ok-lt)',border:'1px solid rgba(80,170,100,.2)',borderRadius:14,padding:'14px 16px',marginBottom:10}}>
+                    <div style={{fontWeight:700,fontSize:14,color:'var(--ok)',marginBottom:3}}>{s.title}</div>
+                    <div style={{fontSize:12,color:'var(--text-3)',marginBottom:6}}>{s.pair.join(' · ')}</div>
+                    <div style={{fontSize:13,color:'var(--text-2)',lineHeight:1.5}}>{s.text}</div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {allConflicts.length===0&&allSynergies.length===0&&(
+              <div className="empty" style={{paddingTop:40}}>
+                <div className="empty-icon">✅</div>
+                <div className="empty-title">Всё в порядке</div>
+                <div className="empty-text">Конфликтов не обнаружено. Добавь больше продуктов со составом — может найду и полезные синергии</div>
+              </div>
+            )}
+
+            {/* Вся таблица совместимости активов */}
+            <div className="section" style={{marginBottom:28}}>
+              <div className="section-title" style={{marginBottom:12}}>Таблица ключевых правил</div>
+              <div className="card" style={{padding:0,overflow:'hidden'}}>
+                {[
+                  {a:'Ретинол',  b:'AHA/BHA',      ok:false, note:'Разделяй на утро/вечер или чередуй дни'},
+                  {a:'Ретинол',  b:'Витамин C',     ok:false, note:'Разный pH — ретинол вечером, C утром'},
+                  {a:'Ретинол',  b:'Ниацинамид',    ok:true,  note:'Ниацинамид снижает раздражение'},
+                  {a:'Ретинол',  b:'Гиалуронка',    ok:true,  note:'Увлажняет и смягчает действие'},
+                  {a:'Витамин C',b:'SPF',            ok:true,  note:'Идеальное утреннее трио с пептидами'},
+                  {a:'Витамин C',b:'Феруловая к-та', ok:true,  note:'Стабилизирует и усиливает'},
+                  {a:'AHA',      b:'BHA',            ok:false, note:'Двойное отшелушивание — только раздельно'},
+                  {a:'AHA',      b:'Гиалуронка',     ok:true,  note:'После кислоты гиалуронка впитывается лучше'},
+                  {a:'Ниацинамид',b:'Гиалуронка',   ok:true,  note:'Универсальный дуэт для любого типа кожи'},
+                  {a:'Бензоилпероксид',b:'Ретинол',  ok:false, note:'BP окисляет и уничтожает ретинол'},
+                  {a:'Пептиды',  b:'Кислоты',        ok:false, note:'Кислоты разрушают пептиды — разноси по времени'},
+                  {a:'Пептиды',  b:'Гиалуронка',     ok:true,  note:'Усиливают антивозрастной эффект'},
+                ].map((row,i,arr)=>(
+                  <div key={i} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 16px',borderBottom:i<arr.length-1?'1px solid var(--bg)':'none'}}>
+                    <div style={{flex:1,minWidth:0}}>
+                      <span style={{fontWeight:600,fontSize:13}}>{row.a}</span>
+                      <span style={{color:'var(--text-3)',fontSize:13}}> + {row.b}</span>
+                    </div>
+                    <div style={{fontSize:20,flexShrink:0}}>{row.ok?'✅':'⚠️'}</div>
+                    <div style={{fontSize:11,color:'var(--text-3)',flexShrink:0,maxWidth:130,textAlign:'right',lineHeight:1.3}}>{row.note}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </>
+        )}
+      </>}
+
+      {/* === ВКЛ: Правила === */}
+      {advTab==='tips'&&(
+        <div className="section" style={{marginTop:4}}>
+          {COMPATIBILITY_TIPS.map((tip,i)=>(
+            <div key={i} className="card" style={{marginBottom:12,display:'flex',gap:14,alignItems:'flex-start'}}>
+              <div style={{fontSize:28,flexShrink:0}}>{tip.icon}</div>
+              <div>
+                <div style={{fontWeight:700,fontSize:14,marginBottom:4}}>{tip.title}</div>
+                <div style={{fontSize:13,color:'var(--text-2)',lineHeight:1.55}}>{tip.text}</div>
+              </div>
+            </div>
+          ))}
+
+          {/* Порядок нанесения — визуальная схема */}
+          <div className="section-title" style={{marginTop:8,marginBottom:12}}>💧 Порядок нанесения</div>
+          <div className="card">
+            {[
+              {n:1,label:'Мицеллярная вода / масло',sub:'Снимает макияж'},
+              {n:2,label:'Гель / пенка для умывания',sub:'Очищает кожу'},
+              {n:3,label:'Тонер',sub:'Выравнивает pH, готовит кожу'},
+              {n:4,label:'Эссенция / сыворотка',sub:'Активные ингредиенты'},
+              {n:5,label:'Точечное средство',sub:'Пятна, прыщи'},
+              {n:6,label:'Увлажняющий крем',sub:'Запечатывает активы'},
+              {n:7,label:'Масло (вечер)',sub:'Самый плотный слой — последним'},
+              {n:8,label:'SPF (только утром)',sub:'Обязательно поверх всего'},
+            ].map((step,i)=>(
+              <div key={i} style={{display:'flex',alignItems:'center',gap:12,padding:'9px 0',borderBottom:i<7?'1px solid var(--bg)':'none'}}>
+                <div style={{width:26,height:26,borderRadius:'50%',background:'var(--primary-lt)',color:'var(--primary)',fontWeight:800,fontSize:13,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>{step.n}</div>
+                <div style={{flex:1}}>
+                  <div style={{fontSize:13,fontWeight:600}}>{step.label}</div>
+                  <div style={{fontSize:11,color:'var(--text-3)'}}>{step.sub}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
       )}
     </div>
   );

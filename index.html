@@ -2274,23 +2274,17 @@ function TrackerScreen({ products, logs, setLogs, isDesktop }) {
   const sortedCosmetics = [...cosmetics].sort((a,b)=>{
     const s = stepOf(a.type)-stepOf(b.type);
     if (s!==0) return s;
+    if (a.type!==b.type) return (a.type||'').localeCompare(b.type||'');
     return a.name.localeCompare(b.name,'ru');
   });
 
-  // Группируем по типу — выводим заголовок типа над группой
-  function groupByType(list) {
-    const groups = [];
-    let curType = null;
-    for (const p of list) {
-      if (p.type!==curType) { groups.push({type:p.type, items:[p]}); curType=p.type; }
-      else groups[groups.length-1].items.push(p);
-    }
-    return groups;
-  }
+  // Какие этапы 1-12 присутствуют в коллекции
+  const presentSteps = new Set(cosmetics.map(p=>stepOf(p.type)).filter(s=>s>=1&&s<=12));
+  const missingSteps = [];
+  for (let i=1;i<=12;i++) if (!presentSteps.has(i)) missingSteps.push(i);
 
   const RoutineSection = ({period,label})=>{
     const done=(log[period]||[]).length;
-    const groups = groupByType(sortedCosmetics);
     return (
       <div className="routine-card">
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:12}}>
@@ -2300,34 +2294,55 @@ function TrackerScreen({ products, logs, setLogs, isDesktop }) {
           </div>
           {done===cosmetics.length&&cosmetics.length>0&&<div style={{fontSize:12,fontWeight:700,color:'var(--ok)',background:'var(--ok-lt)',padding:'4px 10px',borderRadius:20}}>✓ Готово</div>}
         </div>
+
+        {/* Индикатор всех 12 этапов: видно сразу, какие этапы пропущены */}
+        {cosmetics.length>0 && (
+          <div style={{display:'flex',gap:3,marginBottom:10,flexWrap:'wrap'}}>
+            {Array.from({length:12},(_,i)=>i+1).map(n=>{
+              const present = presentSteps.has(n);
+              return (
+                <div key={n} title={`Этап ${n}${present?' — есть':' — нет средства'}`}
+                  style={{
+                    width:18, height:18, borderRadius:5, fontSize:10, fontWeight:700,
+                    display:'flex', alignItems:'center', justifyContent:'center',
+                    background: present ? 'var(--primary)' : 'var(--bg)',
+                    color: present ? '#fff' : 'var(--text-3)',
+                    border: present ? 'none' : '1px dashed var(--border)',
+                  }}>{n}</div>
+              );
+            })}
+          </div>
+        )}
+
         {cosmetics.length===0
           ?<div style={{textAlign:'center',fontSize:13,color:'var(--text-3)',padding:'12px 0'}}>Добавь средства в базу («Есть сейчас»)</div>
-          :groups.map((grp, gi)=>{
-            const t = PRODUCT_TYPES.find(x=>x.id===grp.type) || {label:'Другое', icon:'🧴'};
+          :sortedCosmetics.map(p=>{
+            const checked=(log[period]||[]).includes(p.id);
+            const t = PRODUCT_TYPES.find(x=>x.id===p.type) || {label:'Другое', icon:'🧴'};
+            const stepN = (t.step && t.step<=12) ? t.step : null;
             return (
-              <div key={grp.type} style={{marginBottom: gi<groups.length-1?6:0}}>
-                <div style={{fontSize:11,fontWeight:700,color:'var(--text-3)',letterSpacing:'.5px',textTransform:'uppercase',padding:'8px 2px 4px'}}>
-                  {t.icon} {t.label}{t.step && t.step<=12 ? ` · этап ${t.step}` : ''}
+              <div key={p.id} className="check-item" onClick={()=>toggle(period,p.id)}>
+                <div className={`check-box${checked?' on':''}`}>{checked&&<IcoCheck/>}</div>
+                {/* Чип-этап */}
+                {stepN!==null && (
+                  <div style={{
+                    width:22,height:22,borderRadius:6,background:'var(--primary-lt)',color:'var(--primary-dk)',
+                    fontSize:11,fontWeight:800,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0
+                  }} title={`Этап ${stepN}: ${t.label}`}>{stepN}</div>
+                )}
+                {/* Миниатюра: фото или иконка типа */}
+                <div style={{width:36,height:36,borderRadius:8,background:'var(--bg)',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,overflow:'hidden'}}>
+                  {p.photo
+                    ? <img src={p.photo} alt="" style={{width:'100%',height:'100%',objectFit:'cover'}}/>
+                    : <span style={{fontSize:20}}>{typeIcon(p.type)}</span>
+                  }
                 </div>
-                {grp.items.map(p=>{
-                  const checked=(log[period]||[]).includes(p.id);
-                  return (
-                    <div key={p.id} className="check-item" onClick={()=>toggle(period,p.id)}>
-                      <div className={`check-box${checked?' on':''}`}>{checked&&<IcoCheck/>}</div>
-                      {/* Миниатюра: фото или иконка типа */}
-                      <div style={{width:36,height:36,borderRadius:8,background:'var(--bg)',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,overflow:'hidden',marginRight:2}}>
-                        {p.photo
-                          ? <img src={p.photo} alt="" style={{width:'100%',height:'100%',objectFit:'cover'}}/>
-                          : <span style={{fontSize:20}}>{typeIcon(p.type)}</span>
-                        }
-                      </div>
-                      <div style={{flex:1,minWidth:0}}>
-                        <div style={{fontSize:14,textDecoration:checked?'line-through':'none',color:checked?'var(--text-3)':'var(--text)'}}>{p.name}</div>
-                        {p.brand&&<div style={{fontSize:11,color:'var(--text-3)'}}>{p.brand}</div>}
-                      </div>
-                    </div>
-                  );
-                })}
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontSize:14,textDecoration:checked?'line-through':'none',color:checked?'var(--text-3)':'var(--text)'}}>{p.name}</div>
+                  <div style={{fontSize:10,color:'var(--text-3)',marginTop:1}}>
+                    {t.icon} {t.label}{p.brand?` · ${p.brand}`:''}
+                  </div>
+                </div>
               </div>
             );
           })

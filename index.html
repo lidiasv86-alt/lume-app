@@ -448,6 +448,30 @@ const PRODUCT_TYPES = [
   { id:'gadget_other', label:'Гаджет',       icon:'🔌', isGadget:true,  step:100 },
 ];
 
+// =============================================
+// CARE_STEPS — единый канон 12 этапов ухода (один источник правды)
+// Используется в Рутине, Плане и Советах. Связан с PRODUCT_TYPES через step.
+// =============================================
+const CARE_STEPS = [
+  { n:1,  label:'Снятие макияжа / SPF',  sub:'Мицеллярка или гидрофильное масло', when:'evening', icon:'💦', types:['micellar'] },
+  { n:2,  label:'Умывание',               sub:'Гель / пенка / молочко',            when:'both',    icon:'🫧', types:['cleanser'] },
+  { n:3,  label:'Пилинг / эксфолиация',  sub:'AHA/BHA по графику, 2-3 раза/нед.',  when:'evening', icon:'🍋', types:['exfoliant'] },
+  { n:4,  label:'Тонер',                  sub:'Выравнивает pH, готовит кожу',       when:'both',    icon:'💧', types:['toner'] },
+  { n:5,  label:'Эссенция / Бустер',     sub:'Глубокое увлажнение, подготовка',     when:'both',    icon:'🌊', types:['essence','booster'] },
+  { n:6,  label:'Ампула',                 sub:'Концентрат, интенсивный курс',        when:'both',    icon:'💉', types:['ampoule'] },
+  { n:7,  label:'Сыворотка / Серум',     sub:'Активы: ретинол вечер, C утром',      when:'both',    icon:'✨', types:['serum','serum_aqua'] },
+  { n:8,  label:'Маска / Патчи',          sub:'1-3 раза в неделю',                   when:'both',    icon:'🌿', types:['mask','patches'] },
+  { n:9,  label:'Крем для глаз',          sub:'Деликатно, похлопывая',               when:'both',    icon:'👁️', types:['eye'] },
+  { n:10, label:'Крем',                    sub:'Утром лёгкий, вечером питательный',   when:'both',    icon:'🫙', types:['moisturizer'] },
+  { n:11, label:'Масло',                   sub:'Только вечер, последним слоем',       when:'evening', icon:'🫗', types:['oil'] },
+  { n:12, label:'SPF',                     sub:'Только утро, обязательно поверх всего',when:'morning', icon:'☀️', types:['spf'] },
+];
+const stepNumOf = (typeId) => PRODUCT_TYPES.find(t=>t.id===typeId)?.step ?? null;
+const stepInfoOf = (typeId) => {
+  const n = stepNumOf(typeId);
+  return n && n<=12 ? CARE_STEPS.find(s=>s.n===n) : null;
+};
+
 // Назначения для тонеров / сывороток / масок (поле purpose в продукте)
 const PRODUCT_PURPOSES = {
   toner: [
@@ -2040,6 +2064,63 @@ function ProductSheet({ product, allProducts, onSave, onDelete, onClose }) {
 // =============================================
 // PRODUCTS SCREEN
 // =============================================
+// Карточка средства в Базе с шильдой этапа и назначения
+function ProductCard({ p, onClick }) {
+  const days = getDaysLeft(p), st = expiryStatus(days);
+  const t = PRODUCT_TYPES.find(x=>x.id===p.type) || {label:'Другое', icon:'🧴'};
+  const sn = (t.step && t.step<=12) ? t.step : null;
+  const purpose = p.purpose && PRODUCT_PURPOSES[p.type]?.find(x=>x.id===p.purpose);
+  const modes = (p.gadgetModes||[]).map(id=>GADGET_MODES.find(m=>m.id===id)).filter(Boolean);
+  return (
+    <div className="product-card" onClick={onClick} style={{position:'relative'}}>
+      {/* Шильда этапа в углу фотографии */}
+      {sn && (
+        <div title={`Этап ${sn}: ${t.label}`} style={{
+          position:'absolute', top:6, left:6, zIndex:2,
+          background:'var(--primary)', color:'#fff',
+          width:24, height:24, borderRadius:8, fontSize:12, fontWeight:800,
+          display:'flex', alignItems:'center', justifyContent:'center',
+          boxShadow:'0 2px 6px rgba(31,42,38,.25)'
+        }}>{sn}</div>
+      )}
+      {t.isGadget && (
+        <div title="Гаджет" style={{
+          position:'absolute', top:6, left:6, zIndex:2,
+          background:'var(--surface)', color:'var(--primary-dk)',
+          padding:'2px 8px', borderRadius:8, fontSize:10, fontWeight:700,
+          boxShadow:'0 2px 6px rgba(31,42,38,.20)'
+        }}>💎 Гаджет</div>
+      )}
+      <div className="product-photo">{p.photo?<img src={p.photo} alt={p.name}/>:typeIcon(p.type)}</div>
+      <div className="product-info">
+        <div style={{display:'flex',alignItems:'center',gap:5,marginBottom:2,flexWrap:'wrap'}}>
+          <span style={{fontSize:10,color:'var(--text-3)',fontWeight:600,letterSpacing:'.3px',textTransform:'uppercase'}}>
+            {t.icon} {t.label}
+          </span>
+          {purpose && (
+            <span style={{fontSize:9,padding:'1px 6px',borderRadius:6,background:'var(--primary-lt)',color:'var(--primary-dk)',fontWeight:700}}>
+              {purpose.icon} {purpose.label}
+            </span>
+          )}
+        </div>
+        <div className="product-name">{p.name}</div>
+        {p.brand&&<div className="product-brand">{p.brand}</div>}
+        {modes.length>0 && (
+          <div style={{display:'flex',flexWrap:'wrap',gap:3,marginTop:4}}>
+            {modes.slice(0,3).map(m=>(
+              <span key={m.id} style={{fontSize:9,padding:'1px 5px',borderRadius:5,background:'var(--bg)',color:'var(--text-2)',fontWeight:600}}>
+                {m.icon} {m.label}
+              </span>
+            ))}
+            {modes.length>3 && <span style={{fontSize:9,color:'var(--text-3)',fontWeight:600}}>+{modes.length-3}</span>}
+          </div>
+        )}
+        {days!==null&&<div className={`badge badge-${st}`} style={{marginTop:4}}>{days<0?'Истёк':`${days} дн.`}</div>}
+      </div>
+    </div>
+  );
+}
+
 function ProductsScreen({ products, setProducts }) {
   const [filter,setFilter]=useState('all');
   const [search,setSearch]=useState('');
@@ -2053,6 +2134,7 @@ function ProductsScreen({ products, setProducts }) {
   });
 
   // Сортировка
+  const stepN = (id) => PRODUCT_TYPES.find(t=>t.id===id)?.step ?? 99;
   const shown = [...filtered].sort((a,b)=>{
     if(sortBy==='name') return a.name.localeCompare(b.name,'ru');
     if(sortBy==='expiry') {
@@ -2060,13 +2142,28 @@ function ProductsScreen({ products, setProducts }) {
       return da-db;
     }
     if(sortBy==='type') return (a.type||'').localeCompare(b.type||'');
+    if(sortBy==='step') {
+      const sa=stepN(a.type), sb=stepN(b.type);
+      if (sa!==sb) return sa-sb;
+      return a.name.localeCompare(b.name,'ru');
+    }
     return 0;
   });
 
-  // Группировка по типу
+  // Группировка по типу или по этапу
   const grouped = sortBy==='type' ? shown.reduce((acc,p)=>{
     const t = PRODUCT_TYPES.find(x=>x.id===p.type)||{label:'Другое',icon:'🧴'};
     const key = t.icon+' '+t.label;
+    if(!acc[key]) acc[key]=[];
+    acc[key].push(p);
+    return acc;
+  },{}) :
+  sortBy==='step' ? shown.reduce((acc,p)=>{
+    const t = PRODUCT_TYPES.find(x=>x.id===p.type)||{label:'Другое',icon:'🧴',step:99};
+    const sn = t.step;
+    const key = (t.isGadget) ? '💎 Гаджеты' :
+                (sn && sn<=12) ? `Этап ${sn} — ${t.icon} ${t.label}` :
+                '🧴 Без этапа';
     if(!acc[key]) acc[key]=[];
     acc[key].push(p);
     return acc;
@@ -2100,7 +2197,7 @@ function ProductsScreen({ products, setProducts }) {
 
         {/* Сортировка */}
         <div style={{display:'flex',gap:6,padding:'0 16px',marginBottom:12,overflowX:'auto',paddingBottom:2}}>
-          {[['default','По дате'],['type','По типу'],['name','По названию'],['expiry','По сроку']].map(([id,lbl])=>(
+          {[['default','По дате'],['step','По этапу'],['type','По типу'],['name','По названию'],['expiry','По сроку']].map(([id,lbl])=>(
             <button key={id} onClick={()=>setSortBy(id)}
               style={{padding:'5px 12px',borderRadius:20,fontSize:12,fontWeight:600,border:'none',cursor:'pointer',flexShrink:0,
                 background:sortBy===id?'var(--primary)':'var(--surface)',
@@ -2118,36 +2215,12 @@ function ProductsScreen({ products, setProducts }) {
                 <div key={groupLabel}>
                   <div style={{padding:'0 16px',marginBottom:8,marginTop:16,fontSize:13,fontWeight:700,color:'var(--text-2)',letterSpacing:'.01em'}}>{groupLabel}</div>
                   <div className="product-grid">
-                    {items.map(p=>{
-                      const days=getDaysLeft(p), st=expiryStatus(days);
-                      return (
-                        <div key={p.id} className="product-card" onClick={()=>setSheet(p)}>
-                          <div className="product-photo">{p.photo?<img src={p.photo} alt={p.name}/>:typeIcon(p.type)}</div>
-                          <div className="product-info">
-                            <div className="product-name">{p.name}</div>
-                            {p.brand&&<div className="product-brand">{p.brand}</div>}
-                            {days!==null&&<div className={`badge badge-${st}`}>{days<0?'Истёк':`${days} дн.`}</div>}
-                          </div>
-                        </div>
-                      );
-                    })}
+                    {items.map(p=><ProductCard key={p.id} p={p} onClick={()=>setSheet(p)}/>)}
                   </div>
                 </div>
               ))
             : <div className="product-grid">
-                {shown.map(p=>{
-                  const days=getDaysLeft(p), st=expiryStatus(days);
-                  return (
-                    <div key={p.id} className="product-card" onClick={()=>setSheet(p)}>
-                      <div className="product-photo">{p.photo?<img src={p.photo} alt={p.name}/>:typeIcon(p.type)}</div>
-                      <div className="product-info">
-                        <div className="product-name">{p.name}</div>
-                        {p.brand&&<div className="product-brand">{p.brand}</div>}
-                        {days!==null&&<div className={`badge badge-${st}`}>{days<0?'Истёк':`${days} дн.`}</div>}
-                      </div>
-                    </div>
-                  );
-                })}
+                {shown.map(p=><ProductCard key={p.id} p={p} onClick={()=>setSheet(p)}/>)}
               </div>
         }
       </div>
@@ -3029,27 +3102,31 @@ function AdviceScreen({ products }) {
             </div>
           ))}
 
-          {/* Порядок нанесения — визуальная схема */}
-          <div className="section-title" style={{marginTop:8,marginBottom:12}}>💧 Порядок нанесения</div>
+          {/* Порядок нанесения — единый канон 12 этапов (тот же, что в Рутине и Плане) */}
+          <div className="section-title" style={{marginTop:8,marginBottom:6}}>💧 Порядок нанесения</div>
+          <div style={{fontSize:12,color:'var(--text-3)',marginBottom:10,lineHeight:1.5}}>
+            Один канон — те же номера этапов используются в <b>Базе</b>, <b>Рутине</b> и <b>Плане</b>.
+            ☀️ — только утро, 🌙 — только вечер, 🌓 — и утром, и вечером.
+          </div>
           <div className="card">
-            {[
-              {n:1,label:'Мицеллярная вода / масло',sub:'Снимает макияж'},
-              {n:2,label:'Гель / пенка для умывания',sub:'Очищает кожу'},
-              {n:3,label:'Тонер',sub:'Выравнивает pH, готовит кожу'},
-              {n:4,label:'Эссенция / сыворотка',sub:'Активные ингредиенты'},
-              {n:5,label:'Точечное средство',sub:'Пятна, прыщи'},
-              {n:6,label:'Увлажняющий крем',sub:'Запечатывает активы'},
-              {n:7,label:'Масло (вечер)',sub:'Самый плотный слой — последним'},
-              {n:8,label:'SPF (только утром)',sub:'Обязательно поверх всего'},
-            ].map((step,i)=>(
-              <div key={i} style={{display:'flex',alignItems:'center',gap:12,padding:'9px 0',borderBottom:i<7?'1px solid var(--bg)':'none'}}>
-                <div style={{width:26,height:26,borderRadius:'50%',background:'var(--primary-lt)',color:'var(--primary)',fontWeight:800,fontSize:13,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>{step.n}</div>
-                <div style={{flex:1}}>
-                  <div style={{fontSize:13,fontWeight:600}}>{step.label}</div>
-                  <div style={{fontSize:11,color:'var(--text-3)'}}>{step.sub}</div>
+            {CARE_STEPS.map((step,i)=>{
+              const when = step.when==='morning' ? '☀️' : step.when==='evening' ? '🌙' : '🌓';
+              const types = step.types.map(id=>PRODUCT_TYPES.find(t=>t.id===id)?.label).filter(Boolean).join(' / ');
+              return (
+                <div key={step.n} style={{display:'flex',alignItems:'center',gap:12,padding:'9px 0',borderBottom:i<CARE_STEPS.length-1?'1px solid var(--bg)':'none'}}>
+                  <div style={{width:28,height:28,borderRadius:'50%',background:'var(--primary-lt)',color:'var(--primary)',fontWeight:800,fontSize:13,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>{step.n}</div>
+                  <div style={{fontSize:18,flexShrink:0}} title={types}>{step.icon}</div>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontSize:13,fontWeight:600,display:'flex',alignItems:'center',gap:6}}>
+                      <span>{step.label}</span>
+                      <span style={{fontSize:11,opacity:.7}}>{when}</span>
+                    </div>
+                    <div style={{fontSize:11,color:'var(--text-3)',marginTop:1}}>{step.sub}</div>
+                    {types && <div style={{fontSize:10,color:'var(--text-3)',marginTop:2,fontStyle:'italic'}}>тип в базе: {types}</div>}
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}
@@ -3141,25 +3218,9 @@ function PlanScreen({ products }) {
   }
   const auto = buildAutoPlan();
 
-  // Шаблон утро/вечер: справочные шаги
-  const templateMorning = [
-    { step:1, name:'Умывание', sub:'Мягкое очищение' },
-    { step:2, name:'Тонер', sub:'Освежающий или увлажняющий' },
-    { step:3, name:'Сыворотка', sub:'Утро: антиоксидант (Витамин C)' },
-    { step:4, name:'Крем для глаз', sub:'Лёгкий увлажняющий' },
-    { step:5, name:'Крем', sub:'Лёгкий, увлажняющий' },
-    { step:6, name:'SPF', sub:'Обязательно, 50+' },
-  ];
-  const templateEvening = [
-    { step:1, name:'Снятие макияжа / SPF', sub:'Мицеллярка или гидрофильное масло' },
-    { step:2, name:'Умывание', sub:'Гель или пенка' },
-    { step:3, name:'Тонер', sub:'Балансирующий или эссенция' },
-    { step:4, name:'Активы', sub:'Ретинол / кислоты — по графику' },
-    { step:5, name:'Сыворотка', sub:'Восстановление, пептиды' },
-    { step:6, name:'Крем для глаз', sub:'Питательный' },
-    { step:7, name:'Крем', sub:'Питательный, барьерный' },
-    { step:8, name:'Масло (по желанию)', sub:'Последним слоем' },
-  ];
+  // Шаблон утро/вечер: единый канон CARE_STEPS, отфильтрованный по времени суток
+  const templateMorning = CARE_STEPS.filter(s=>s.when==='morning'||s.when==='both').map(s=>({step:s.n, name:s.label, sub:s.sub, icon:s.icon}));
+  const templateEvening = CARE_STEPS.filter(s=>s.when==='evening'||s.when==='both').map(s=>({step:s.n, name:s.label, sub:s.sub, icon:s.icon}));
 
   function key(period, idx) { return `${course||'_'}_${period}_${idx}`; }
   function tabBtn(id, label) {
@@ -3171,11 +3232,17 @@ function PlanScreen({ products }) {
       }}>{label}</button>
     );
   }
-  const ChecklistRow = ({k, name, sub, hint, photo, icon}) => {
+  const ChecklistRow = ({k, name, sub, hint, photo, icon, step}) => {
     const isOn = !!checked[k];
     return (
       <div className="check-item" style={{cursor:'pointer'}} onClick={()=>setChecked(prev=>({...prev,[k]:!prev[k]}))}>
         <div className={`check-box${isOn?' on':''}`}>{isOn&&<IcoCheck/>}</div>
+        {step && (
+          <div style={{
+            width:22,height:22,borderRadius:6,background:'var(--primary-lt)',color:'var(--primary-dk)',
+            fontSize:11,fontWeight:800,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0
+          }} title={`Этап ${step}`}>{step}</div>
+        )}
         {(photo||icon) && (
           <div style={{width:32,height:32,borderRadius:8,background:'var(--bg)',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,overflow:'hidden'}}>
             {photo
@@ -3211,23 +3278,23 @@ function PlanScreen({ products }) {
         <>
           <div className="section">
             <div className="routine-card">
-              <div style={{fontSize:16,fontWeight:700,marginBottom:10}}>☀️ Утро</div>
+              <div style={{fontSize:16,fontWeight:700,marginBottom:10}}>☀️ Утро · {templateMorning.length} шагов</div>
               {templateMorning.map((s,i)=>(
-                <ChecklistRow key={'tm'+i} k={`tm_${i}`} icon={`${s.step}️⃣`} name={s.name} sub={s.sub}/>
+                <ChecklistRow key={'tm'+s.step} k={`tm_${s.step}`} step={s.step} icon={s.icon} name={s.name} sub={s.sub}/>
               ))}
             </div>
           </div>
           <div className="section">
             <div className="routine-card">
-              <div style={{fontSize:16,fontWeight:700,marginBottom:10}}>🌙 Вечер</div>
+              <div style={{fontSize:16,fontWeight:700,marginBottom:10}}>🌙 Вечер · {templateEvening.length} шагов</div>
               {templateEvening.map((s,i)=>(
-                <ChecklistRow key={'te'+i} k={`te_${i}`} icon={`${s.step}️⃣`} name={s.name} sub={s.sub}/>
+                <ChecklistRow key={'te'+s.step} k={`te_${s.step}`} step={s.step} icon={s.icon} name={s.name} sub={s.sub}/>
               ))}
             </div>
           </div>
           <div className="section" style={{marginBottom:20}}>
             <div className="card" style={{background:'var(--primary-lt)',padding:'12px 14px',fontSize:12,color:'var(--text-2)',lineHeight:1.5}}>
-              💡 Это <b>универсальный шаблон</b> — он не привязан к твоим конкретным средствам. Для индивидуального плана открой вкладку <b>Авто-план</b>.
+              💡 Это <b>универсальный канон 12 этапов</b> (тот же, что в Базе и Советах). Не все нужны каждый день — пилинг 2-3 раза в неделю, маска 1-3 раза. Для индивидуального плана из твоих средств — открой вкладку <b>Авто-план</b>.
             </div>
           </div>
         </>
@@ -3242,17 +3309,19 @@ function PlanScreen({ products }) {
               <div className="section">
                 <div className="routine-card">
                   <div style={{fontSize:16,fontWeight:700,marginBottom:10}}>☀️ Утро · {auto.morning.length}</div>
-                  {auto.morning.map((p,i)=>(
-                    <ChecklistRow key={'am'+p.id} k={`am_${p.id}`} photo={p.photo} icon={typeIcon(p.type)} name={p.name} sub={p.brand} hint={p.hint}/>
-                  ))}
+                  {auto.morning.map((p,i)=>{
+                    const sn = stepNumOf(p.type);
+                    return <ChecklistRow key={'am'+p.id} k={`am_${p.id}`} step={sn&&sn<=12?sn:null} photo={p.photo} icon={typeIcon(p.type)} name={p.name} sub={p.brand} hint={p.hint}/>;
+                  })}
                 </div>
               </div>
               <div className="section">
                 <div className="routine-card">
                   <div style={{fontSize:16,fontWeight:700,marginBottom:10}}>🌙 Вечер · {auto.evening.length}</div>
-                  {auto.evening.map((p,i)=>(
-                    <ChecklistRow key={'ae'+p.id} k={`ae_${p.id}`} photo={p.photo} icon={typeIcon(p.type)} name={p.name} sub={p.brand} hint={p.hint}/>
-                  ))}
+                  {auto.evening.map((p,i)=>{
+                    const sn = stepNumOf(p.type);
+                    return <ChecklistRow key={'ae'+p.id} k={`ae_${p.id}`} step={sn&&sn<=12?sn:null} photo={p.photo} icon={typeIcon(p.type)} name={p.name} sub={p.brand} hint={p.hint}/>;
+                  })}
                 </div>
               </div>
               <div className="section" style={{marginBottom:20}}>

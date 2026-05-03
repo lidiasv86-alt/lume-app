@@ -378,7 +378,7 @@ img { display:block; }
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.development.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
 <script type="text/babel">
-const { useState, useEffect, useRef, useCallback } = React;
+const { useState, useEffect, useRef, useCallback, useMemo } = React;
 
 // =============================================
 // =============================================
@@ -900,8 +900,30 @@ function exportDiaryCSV(logs, products) {
 }
 
 // =============================================
-// STORAGE HOOK
+// STORAGE HOOK — с защитой от переполнения
 // =============================================
+function getStorageUsage() {
+  let total = 0;
+  try {
+    for (const k in localStorage) {
+      if (Object.prototype.hasOwnProperty.call(localStorage, k)) {
+        total += (localStorage.getItem(k)||'').length + k.length;
+      }
+    }
+  } catch {}
+  return total; // в байтах (приблизительно — JS-строки UTF-16)
+}
+const STORAGE_QUOTA = 5 * 1024 * 1024; // ~5 MB
+
+let _storageWarnedAt = 0;
+function warnStorageOnce(msg) {
+  // Не алертим чаще раза в 10 секунд, чтобы не задолбать
+  const now = Date.now();
+  if (now - _storageWarnedAt < 10000) return;
+  _storageWarnedAt = now;
+  alert(msg);
+}
+
 function useStorage(key, init) {
   const [val,setVal]=useState(()=>{
     try { const s=localStorage.getItem(key); return s?JSON.parse(s):init; } catch{return init;}
@@ -909,11 +931,69 @@ function useStorage(key, init) {
   const set=useCallback((updater)=>{
     setVal(prev=>{
       const next=typeof updater==='function'?updater(prev):updater;
-      try{localStorage.setItem(key,JSON.stringify(next));}catch{}
+      try{
+        localStorage.setItem(key,JSON.stringify(next));
+      } catch(e){
+        // Самая частая беда: QuotaExceededError. Громко предупреждаем — иначе данные молча теряются.
+        const isQuota = e && (e.name==='QuotaExceededError' || e.code===22 || e.code===1014 || /quota/i.test(e.message||''));
+        if (isQuota) {
+          warnStorageOnce(
+            'Хранилище браузера переполнено — новое сохранение НЕ записано.\n\n'+
+            'Что сделать прямо сейчас:\n'+
+            '1. Открой раздел «Главная» → нажми «📥 Скачать резервную копию» — это сохранит всё в файл.\n'+
+            '2. Удали несколько фото у самых старых средств (фото занимают больше всего места).\n\n'+
+            'После этого новые сохранения снова будут проходить.'
+          );
+          // Сохраняем хотя бы в memory — чтобы не пришлось потерять текущее изменение
+          window.__LUME_PENDING__ = window.__LUME_PENDING__ || {};
+          window.__LUME_PENDING__[key] = next;
+        } else {
+          console.error('useStorage write failed:', e);
+        }
+      }
       return next;
     });
   },[key]);
   return [val,set];
+}
+
+// Скачать полный бэкап как JSON (одним кликом, без облака)
+function downloadBackup() {
+  const dump = {};
+  try {
+    for (const k in localStorage) {
+      if (Object.prototype.hasOwnProperty.call(localStorage, k) && k.startsWith('lume_')) {
+        try { dump[k] = JSON.parse(localStorage.getItem(k)); }
+        catch { dump[k] = localStorage.getItem(k); }
+      }
+    }
+  } catch {}
+  const blob = new Blob([JSON.stringify({version:1, exportedAt:new Date().toISOString(), data:dump}, null, 2)], {type:'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = `lume_backup_${new Date().toISOString().slice(0,10)}.json`; a.click();
+  URL.revokeObjectURL(url);
+}
+
+// Восстановить из JSON-файла бэкапа
+function restoreBackup(file, onDone) {
+  const r = new FileReader();
+  r.onload = e => {
+    try {
+      const json = JSON.parse(e.target.result);
+      const data = json.data || json; // поддержка обоих форматов
+      if (!confirm(`Восстановить ${Object.keys(data).length} ключей? Текущие данные будут перезаписаны.`)) return;
+      for (const k in data) {
+        try { localStorage.setItem(k, typeof data[k]==='string' ? data[k] : JSON.stringify(data[k])); } catch {}
+      }
+      alert('Бэкап восстановлен. Сейчас перезагружу страницу.');
+      onDone && onDone();
+      location.reload();
+    } catch (err) {
+      alert('Не удалось прочитать файл бэкапа: ' + err.message);
+    }
+  };
+  r.readAsText(file);
 }
 
 // =============================================
@@ -1371,6 +1451,74 @@ function RenewSheet({ product, onSave, onClose }) {
 }
 
 // =============================================
+// BACKUP CARD — индикатор хранилища и быстрый бэкап в файл
+// =============================================
+function BackupCard() {
+  const [used, setUsed]   = useState(()=>getStorageUsage());
+  const fileRef           = useRef();
+  // Обновляем индикатор каждые 5 сек
+  useEffect(()=>{
+    const t = setInterval(()=>setUsed(getStorageUsage()), 5000);
+    return ()=>clearInterval(t);
+  },[]);
+  const pct = Math.min(100, Math.round(used/STORAGE_QUOTA*100));
+  const danger = pct>=80;
+  const warn   = pct>=60 && pct<80;
+  const color  = danger?'var(--danger)' : warn?'var(--warn)' : 'var(--ok)';
+  const bg     = danger?'var(--danger-lt)' : warn?'var(--warn-lt)' : 'var(--ok-lt)';
+
+  const lastBackup = (typeof localStorage!=='undefined') ? localStorage.getItem('lume_last_backup') : '';
+
+  function handleBackup() {
+    downloadBackup();
+    try { localStorage.setItem('lume_last_backup', new Date().toISOString()); } catch {}
+  }
+  function handleRestoreFile(e) {
+    const f = e.target.files?.[0]; if (!f) return;
+    restoreBackup(f);
+    e.target.value = '';
+  }
+
+  return (
+    <div className="section">
+      <div className="card" style={{borderLeft:`4px solid ${color}`, background:'var(--surface)'}}>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}>
+          <div>
+            <div style={{fontSize:13,fontWeight:700}}>💾 Резервная копия</div>
+            <div style={{fontSize:11,color:'var(--text-3)',marginTop:2}}>
+              {lastBackup
+                ? `Последний бэкап: ${new Date(lastBackup).toLocaleString('ru-RU',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})}`
+                : 'Бэкап ещё не делался'}
+            </div>
+          </div>
+          <div style={{textAlign:'right'}}>
+            <div style={{fontSize:18,fontWeight:800,color}}>{pct}%</div>
+            <div style={{fontSize:10,color:'var(--text-3)'}}>{(used/1024/1024).toFixed(2)} / 5 MB</div>
+          </div>
+        </div>
+        <div style={{height:6,background:'var(--bg)',borderRadius:3,overflow:'hidden',marginBottom:12}}>
+          <div style={{height:'100%',width:`${pct}%`,background:color,transition:'width .3s'}}/>
+        </div>
+        {danger && (
+          <div style={{padding:'8px 10px',background:bg,borderRadius:8,fontSize:12,color:'var(--text-2)',marginBottom:10,lineHeight:1.5}}>
+            ⚠️ Хранилище почти заполнено! Срочно сохрани резервную копию и удали несколько фото у самых старых средств.
+          </div>
+        )}
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
+          <button onClick={handleBackup} style={{padding:'10px',borderRadius:10,border:'none',background:'var(--primary)',color:'#fff',fontSize:13,fontWeight:700,cursor:'pointer'}}>
+            📥 Скачать бэкап
+          </button>
+          <button onClick={()=>fileRef.current?.click()} style={{padding:'10px',borderRadius:10,border:'1px solid var(--border)',background:'var(--surface)',color:'var(--text-2)',fontSize:13,fontWeight:600,cursor:'pointer'}}>
+            📤 Восстановить
+          </button>
+        </div>
+        <input ref={fileRef} type="file" accept="application/json" onChange={handleRestoreFile} style={{display:'none'}}/>
+      </div>
+    </div>
+  );
+}
+
+// =============================================
 // HOME SCREEN
 // =============================================
 function HomeScreen({ products, setProducts, logs, setScreen, setLogs, isDesktop }) {
@@ -1423,6 +1571,9 @@ function HomeScreen({ products, setProducts, logs, setScreen, setLogs, isDesktop
           )}
         </div>
       </div>
+
+      {/* Storage / Backup */}
+      <BackupCard/>
 
       {/* Routine + expiring  */}
       <div className="section">
@@ -1775,7 +1926,8 @@ function ProductSheet({ product, allProducts, onSave, onDelete, onClose }) {
     reader.onload = ev => {
       const img = new Image();
       img.onload = () => {
-        const MAX = 500;
+        // Сильное сжатие — 300px и качество 0.6, чтобы каждое фото занимало ~15-30 KB
+        const MAX = 300;
         let w = img.width, h = img.height;
         if (w > MAX || h > MAX) {
           if (w > h) { h = Math.round(h * MAX / w); w = MAX; }
@@ -1784,7 +1936,7 @@ function ProductSheet({ product, allProducts, onSave, onDelete, onClose }) {
         const canvas = document.createElement('canvas');
         canvas.width = w; canvas.height = h;
         canvas.getContext('2d').drawImage(img, 0, 0, w, h);
-        set('photo', canvas.toDataURL('image/jpeg', 0.75));
+        set('photo', canvas.toDataURL('image/jpeg', 0.6));
       };
       img.onerror = () => set('photo', ev.target.result);
       img.src = ev.target.result;
@@ -3384,6 +3536,101 @@ function PlanScreen({ products }) {
 // =============================================
 // APP ROOT
 // =============================================
+// =============================================
+// AUTO-SYNC HOOK — облачная синхронизация при каждом изменении (debounced)
+// =============================================
+function useAutoSync(products, setProducts, logs, setLogs) {
+  const [apiKey]         = useStorage('lume_sync_key', '');
+  const [binId, setBinId]= useStorage('lume_sync_bin', '');
+  const [, setLastSync]  = useStorage('lume_sync_time', '');
+  const [status, setStatus] = useState('idle'); // idle | pulling | pushing | ok | err | off
+  const [errMsg, setErrMsg] = useState('');
+  const initialPullDone     = useRef(false);
+  const pushTimer           = useRef(null);
+  const lastPushedHash      = useRef(null);
+
+  const enabled = !!(apiKey && apiKey.trim());
+
+  // Хеш текущего состояния — чтобы не пушить, если ничего не изменилось
+  const hash = useMemo(()=>{
+    try { return JSON.stringify({p:products, l:logs}).length + ':' + (products?.length||0) + ':' + Object.keys(logs||{}).length; }
+    catch { return Math.random().toString(); }
+  }, [products, logs]);
+
+  // 1) При запуске — pull свежих данных и merge
+  useEffect(()=>{
+    if (!enabled || initialPullDone.current) { if(!enabled) setStatus('off'); return; }
+    initialPullDone.current = true;
+    if (!binId) { setStatus('idle'); return; }
+    setStatus('pulling');
+    cloudPull(apiKey, binId)
+      .then(remote => {
+        if (!remote) { setStatus('ok'); return; }
+        // Если на удалёнке больше данных — берём оттуда (или merge)
+        const merged = mergeSync(products, logs, remote);
+        if ((merged.products?.length||0) > (products?.length||0) ||
+            Object.keys(merged.logs||{}).length > Object.keys(logs||{}).length) {
+          setProducts(merged.products);
+          setLogs(merged.logs);
+        }
+        setStatus('ok');
+        setLastSync(new Date().toISOString());
+        lastPushedHash.current = JSON.stringify({p:merged.products, l:merged.logs}).length + ':' + (merged.products?.length||0) + ':' + Object.keys(merged.logs||{}).length;
+      })
+      .catch(e => { setStatus('err'); setErrMsg(e.message||'Ошибка'); });
+  // eslint-disable-next-line
+  }, [enabled, binId]);
+
+  // 2) При каждом изменении — debounced push в облако
+  useEffect(()=>{
+    if (!enabled) return;
+    if (lastPushedHash.current === hash) return; // не пушим то же самое
+    if (status === 'pulling') return; // не пушим во время pull
+    if (pushTimer.current) clearTimeout(pushTimer.current);
+    pushTimer.current = setTimeout(async () => {
+      try {
+        setStatus('pushing');
+        const newId = await cloudPush(apiKey, binId, { products, logs, syncedAt: Date.now() });
+        if (!binId && newId) setBinId(newId);
+        setStatus('ok');
+        setLastSync(new Date().toISOString());
+        lastPushedHash.current = hash;
+      } catch (e) {
+        setStatus('err'); setErrMsg(e.message||'Ошибка');
+      }
+    }, 3000); // ждём 3 сек без изменений
+    return () => pushTimer.current && clearTimeout(pushTimer.current);
+  // eslint-disable-next-line
+  }, [hash, enabled]);
+
+  return { status, errMsg, enabled };
+}
+
+// Маленький индикатор состояния синхронизации (показывается в шапке)
+function SyncBadge({ status, onClick }) {
+  const map = {
+    off:     { sym:'☁︎', color:'var(--text-3)',  bg:'transparent',         text:'Синхр. выкл' },
+    idle:    { sym:'☁︎', color:'var(--text-3)',  bg:'transparent',         text:'Готово к синхр.' },
+    pulling: { sym:'⇣',  color:'var(--primary)', bg:'var(--primary-lt)',   text:'Загружаю из облака…' },
+    pushing: { sym:'⇡',  color:'var(--primary)', bg:'var(--primary-lt)',   text:'Сохраняю в облако…' },
+    ok:      { sym:'✓',  color:'var(--ok)',      bg:'var(--ok-lt)',        text:'Синхронизировано' },
+    err:     { sym:'!',  color:'var(--danger)',  bg:'var(--danger-lt)',    text:'Ошибка синхр.' },
+  };
+  const m = map[status] || map.idle;
+  return (
+    <button onClick={onClick} title={m.text} style={{
+      position:'fixed', top:8, right:12, zIndex:1000,
+      display:'flex', alignItems:'center', gap:6,
+      padding:'5px 10px', borderRadius:14, border:'none',
+      background:m.bg, color:m.color, fontSize:11, fontWeight:700, cursor:'pointer',
+      boxShadow: status==='ok'||status==='off'||status==='idle' ? 'none' : '0 1px 4px rgba(0,0,0,.08)',
+    }}>
+      <span style={{fontSize:13}}>{m.sym}</span>
+      <span>{m.text}</span>
+    </button>
+  );
+}
+
 function App() {
   const [screen,    setScreen]   = useState('home');
   const [products,  setProducts] = useStorage('lume_v1_products',[]);
@@ -3391,6 +3638,7 @@ function App() {
   const [showSync,  setShowSync] = useState(false);
   const isDesktop                = useIsDesktop();
   const expStatus                = checkExpiry();
+  const sync                     = useAutoSync(products, setProducts, logs, setLogs);
 
   if (expStatus === 'expired') {
     return (
@@ -3411,6 +3659,7 @@ function App() {
           🧪 Тест: {TESTER_NAME}{expStatus==='soon'?' · скоро истекает':''}
         </div>
       )}
+      <SyncBadge status={sync.status} onClick={()=>setShowSync(true)}/>
       <Nav screen={screen} setScreen={setScreen} isDesktop={isDesktop} products={products} logs={logs} onSync={()=>setShowSync(true)}/>
       {screen==='home'      && <HomeScreen      products={products} setProducts={setProducts} logs={logs} setScreen={setScreen} setLogs={setLogs} isDesktop={isDesktop}/>}
       {screen==='products'  && <ProductsScreen  products={products} setProducts={setProducts}/>}
